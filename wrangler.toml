@@ -1,0 +1,17 @@
+name = "cryptopulse-v4"
+main = "worker/index.js"
+compatibility_date = "2026-09-01"
+
+# Deliberately no [triggers] block: this Cloudflare account's 5 Free-tier Cron
+# Trigger slots are already used by V1 (3) and V2 (2). Ingestion is instead
+# driven externally by .github/workflows/ingest.yml calling POST /api/ingest.
+# See docs/ARCHITECTURE.md "Scheduling" section.
+
+[[d1_databases]]
+binding = "DB"
+database_name = "cryptopulse-v4"
+database_id = "5faaf930-ea76-41d3-bef2-df630ff11875"
+
+# Secrets (never committed): set with
+#   wrangler secret put INGEST_TOKEN
+#   wrangler secret put GEMINI_API_KEY   (optional — omit to use the deterministic explanation fallback)

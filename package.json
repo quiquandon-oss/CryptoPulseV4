@@ -1,34 +1,17 @@
 {
   "name": "cryptopulse-v4",
-  "version": "4.0.0",
+  "version": "0.1.0",
   "private": true,
+  "description": "CryptoPulse V4 — deterministic crypto intelligence terminal (Cloudflare Workers + D1)",
+  "type": "module",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint",
-    "test": "vitest run",
-    "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "better-sqlite3": "^13.0.3",
-    "lucide-react": "^1.45.0",
-    "next": "16.3.4",
-    "react": "19.2.8",
-    "react-dom": "19.2.8",
-    "recharts": "^3.10.1"
+    "test": "node --test",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:migrate:local": "wrangler d1 execute cryptopulse-v4 --local --file=migrations/0001_init.sql",
+    "db:migrate:remote": "wrangler d1 execute cryptopulse-v4 --remote --file=migrations/0001_init.sql"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@types/better-sqlite3": "^9.6.0",
-    "@types/node": "^22.20.2",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.3.4",
-    "tailwindcss": "^4",
-    "typescript": "^5",
-    "vite": "^6.2.0",
-    "vitest": "^5.0.0"
+    "wrangler": "^3.90.0"
   }
 }
