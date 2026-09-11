@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CryptoPulse V4 — Terminal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          base: '#0B0D10', surface: '#12151A', border: '#22262C',
+          ink: '#E6E8EB', muted: '#8B92A0', faint: '#565D68',
+          accent: '#5B8DEF', up: '#3FB97A', down: '#E1604F', warn: '#D9A441',
+        },
+        fontFamily: { sans: ['Inter', 'sans-serif'], mono: ['"IBM Plex Mono"', 'monospace'] },
+      },
+    },
+  };
+</script>
+<style>
+  body { font-feature-settings: "tnum" 1; }
+  .bg-live { background: #3FB97A; } .bg-recent { background: #D9A441; }
+  .bg-stale { background: #E1604F; } .bg-unavailable { background: #565D68; }
+</style>
+</head>
+<body class="bg-base text-ink font-sans min-h-screen">
+<div class="max-w-3xl mx-auto px-4 sm:px-6 py-8">
+
+  <header class="flex items-center justify-between mb-8 pb-4 border-b border-border">
+    <div>
+      <h1 class="font-mono font-semibold text-lg tracking-tight">CryptoPulse V4</h1>
+      <p class="text-xs text-faint mt-0.5">Deterministic evidence, not hype.</p>
+    </div>
+    <div class="text-right">
+      <div id="marketStatus" class="flex items-center justify-end gap-2 text-sm font-mono">
+        <span class="w-2 h-2 rounded-full bg-unavailable" id="statusDot"></span>
+        <span id="statusLabel">Loading…</span>
+      </div>
+      <p class="text-xs text-faint mt-0.5" id="lastUpdate"></p>
+    </div>
+  </header>
+
+  <section class="mb-6">
+    <h2 class="text-xs text-faint mb-2">Market overview</h2>
+    <div id="overview" class="border border-border rounded-lg divide-y divide-border overflow-hidden">
+      <div class="px-4 py-6 text-sm text-faint">Loading signals…</div>
+    </div>
+  </section>
+
+  <footer class="flex items-center justify-between text-xs text-faint mt-8">
+    <a href="health.html" class="hover:text-muted underline decoration-faint">Data health</a>
+    <span>V4 — independent of V1/V2/V3</span>
+  </footer>
+</div>
+
+<script src="app.js"></script>
+<script>
+(async function () {
+  const el = {
+    overview: document.getElementById('overview'),
+    statusDot: document.getElementById('statusDot'),
+    statusLabel: document.getElementById('statusLabel'),
+    lastUpdate: document.getElementById('lastUpdate'),
+  };
+
+  function riskBadge(risk) {
+    const color = risk === 'LOW' ? 'text-up' : risk === 'HIGH' ? 'text-down' : 'text-warn';
+    return `<span class="${color} font-mono text-xs">${risk}</span>`;
+  }
+
+  function row(item) {
+    if (!item.signal) {
+      return `<a href="asset.html?asset=${item.asset}" class="flex items-center justify-between px-4 py-4 hover:bg-surface transition-colors">
+        <span class="font-mono font-medium">${item.asset}</span>
+        <span class="text-sm text-faint">Collecting evidence — no signal yet</span>
+      </a>`;
+    }
+    const s = item.signal;
+    const dirColor = s.direction === 'BULLISH' ? 'text-up' : s.direction === 'BEARISH' ? 'text-down' : 'text-muted';
+    return `<a href="asset.html?asset=${item.asset}" class="flex items-center justify-between px-4 py-4 hover:bg-surface transition-colors gap-4">
+      <div class="flex items-baseline gap-3 min-w-0">
+        <span class="font-mono font-medium w-12 shrink-0">${item.asset}</span>
+        <span class="${dirColor} font-mono text-sm shrink-0">${s.direction} ${s.score >= 0 ? '+' : ''}${s.score}</span>
+        <span class="text-xs text-faint truncate hidden sm:inline">${s.evidenceLabel}</span>
+      </div>
+      <div class="flex items-center gap-4 shrink-0">
+        <span class="text-xs text-muted font-mono hidden sm:inline">${s.regime.replaceAll('_', ' ')}</span>
+        ${riskBadge(s.risk)}
+      </div>
+    </a>`;
+  }
+
+  try {
+    const [{ overview }, health] = await Promise.all([
+      v4Fetch('/api/market/overview'),
+      v4Fetch('/api/health'),
+    ]);
+
+    el.overview.innerHTML = overview.map(row).join('') || '<div class="px-4 py-6 text-sm text-faint">No assets configured.</div>';
+
+    el.statusDot.className = `w-2 h-2 rounded-full ${health.overall === 'LIVE' ? 'bg-live' : health.overall === 'DEGRADED' ? 'bg-recent' : 'bg-unavailable'}`;
+    el.statusLabel.textContent = health.overall;
+    el.lastUpdate.textContent = `Checked ${new Date().toLocaleTimeString()}`;
+  } catch (err) {
+    el.overview.innerHTML = `<div class="px-4 py-6 text-sm text-down">Could not reach the V4 API. ${escapeHtml(err.message)}</div>`;
+    el.statusLabel.textContent = 'OFFLINE';
+    el.statusDot.className = 'w-2 h-2 rounded-full bg-unavailable';
+  }
+})();
+</script>
+</body>
+</html>

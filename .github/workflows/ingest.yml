@@ -1,0 +1,22 @@
+name: V4 ingest tick
+
+on:
+  schedule:
+    # Every hour, matching the 1h candle interval in worker/ingest.js.
+    - cron: '5 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call V4 ingest endpoint
+        run: |
+          status=$(curl -s -o /tmp/resp.json -w "%{http_code}" \
+            -X POST "${{ secrets.V4_WORKER_URL }}/api/ingest" \
+            -H "Authorization: Bearer ${{ secrets.V4_INGEST_TOKEN }}")
+          cat /tmp/resp.json
+          if [ "$status" -ge 300 ]; then
+            echo "Ingest call failed with HTTP $status"
+            exit 1
+          fi

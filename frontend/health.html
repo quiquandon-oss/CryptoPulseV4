@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CryptoPulse V4 — Data Health</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: { extend: {
+      colors: { base: '#0B0D10', surface: '#12151A', border: '#22262C', ink: '#E6E8EB', muted: '#8B92A0', faint: '#565D68', accent: '#5B8DEF', up: '#3FB97A', down: '#E1604F', warn: '#D9A441' },
+      fontFamily: { sans: ['Inter', 'sans-serif'], mono: ['"IBM Plex Mono"', 'monospace'] },
+    } },
+  };
+</script>
+</head>
+<body class="bg-base text-ink font-sans min-h-screen">
+<div class="max-w-3xl mx-auto px-4 sm:px-6 py-8">
+  <a href="index.html" class="text-xs text-faint hover:text-muted">&larr; Market overview</a>
+  <h1 class="font-mono font-semibold text-lg mt-3 mb-6 pb-4 border-b border-border">Data health</h1>
+
+  <div id="healthList" class="border border-border rounded-lg divide-y divide-border">
+    <div class="px-4 py-4 text-sm text-faint">Loading…</div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+<script>
+(async function () {
+  const stateColor = { LIVE: 'text-up', OK: 'text-up', RECENT: 'text-warn', STALE: 'text-warn', UNAVAILABLE: 'text-down', ERROR: 'text-down' };
+  try {
+    const health = await v4Fetch('/api/health');
+    const rows = health.detail || [];
+    document.getElementById('healthList').innerHTML = rows.length ? rows.map((r) => `
+      <div class="px-4 py-3 flex items-center justify-between gap-4">
+        <span class="font-mono text-sm">${escapeHtml(r.component)}</span>
+        <span class="text-xs text-faint flex-1 text-right px-3">${escapeHtml(r.detail || '')}</span>
+        <span class="${stateColor[r.status] || 'text-faint'} text-xs font-mono shrink-0">${r.status}</span>
+      </div>`).join('') : '<div class="px-4 py-4 text-sm text-faint">No health data recorded yet — waiting for the first ingest cycle.</div>';
+  } catch (err) {
+    document.getElementById('healthList').innerHTML = `<div class="px-4 py-4 text-sm text-down">Could not reach the V4 API: ${escapeHtml(err.message)}</div>`;
+  }
+})();
+</script>
+</body>
+</html>
