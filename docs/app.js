@@ -1,4 +1,11 @@
 // docs/app.js — Shared frontend components & institutional chart engine
+//
+// CACHE BUSTING: every page loads this via <script src="app.js?v=XXXX">.
+// GitHub Pages' CDN and browsers cache this aggressively with no version-
+// tracked build step in this repo — a real change here was once invisible
+// to the user for that exact reason. Bump the ?v= query param on every
+// page whenever this file changes, or the deploy will look like it did
+// nothing even though the source is correct.
 window.V4_API_BASE = localStorage.getItem('v4-api-base-override') || 'https://cryptopulse-v4.quiquandon.workers.dev';
 
 async function v4Fetch(path) {
@@ -296,16 +303,32 @@ function renderPortfolioValueChart(container, points) {
   const lastInvested = investedPoints[investedPoints.length - 1]?.invested_capital_usd;
   const investedOffScale = lastInvested != null && (lastInvested < min || lastInvested > max);
   const clipId = `plotclip-${Math.random().toString(36).slice(2, 9)}`;
+  const gradId = `plotgrad-${Math.random().toString(36).slice(2, 9)}`;
+
+  // Colored by the trend WITHIN the displayed range (matching V1: a 24H
+  // view that happens to be net-up shows green even if lifetime P&L is
+  // negative) — not by the account's overall P&L, which the header
+  // elsewhere already shows.
+  const trendUp = vals[vals.length - 1] >= vals[0];
+  const lineColor = trendUp ? 'var(--up)' : 'var(--down)';
+  const fillPath = `M${x(0).toFixed(1)},${(H - pad).toFixed(1)} L${valueLine.split(' ').join(' L')} L${x(n - 1).toFixed(1)},${(H - pad).toFixed(1)} Z`;
 
   container.innerHTML = `
     <svg viewBox="0 0 ${W} ${H}" class="w-full h-auto">
-      <defs><clipPath id="${clipId}"><rect x="${pad}" y="${pad}" width="${W - pad * 2}" height="${H - pad * 2}"/></clipPath></defs>
+      <defs>
+        <clipPath id="${clipId}"><rect x="${pad}" y="${pad}" width="${W - pad * 2}" height="${H - pad * 2}"/></clipPath>
+        <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${lineColor}" stop-opacity="0.28"/>
+          <stop offset="100%" stop-color="${lineColor}" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <path d="${fillPath}" fill="url(#${gradId})" clip-path="url(#${clipId})"/>
       ${investedLine ? `<polyline points="${investedLine}" fill="none" stroke="var(--faint)" stroke-width="1.5" stroke-dasharray="4 3" clip-path="url(#${clipId})"/>` : ''}
-      <polyline points="${valueLine}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <polyline points="${valueLine}" fill="none" stroke="${lineColor}" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round"/>
     </svg>
     <div class="flex justify-between items-center text-[10px] font-mono text-faint mt-1 px-1">
       <span>${new Date(valid[0].ts).toLocaleDateString()}</span>
-      <span><span class="text-accent">— </span>value &nbsp; <span class="text-faint">- - </span>invested${investedOffScale ? ` (${fmtUsd(lastInvested)}, off-scale)` : ''}</span>
+      <span><span class="${trendUp ? 'text-up' : 'text-down'}">— </span>value &nbsp; <span class="text-faint">- - </span>invested${investedOffScale ? ` (${fmtUsd(lastInvested)}, off-scale)` : ''}</span>
       <span>${new Date(valid[n - 1].ts).toLocaleDateString()}</span>
     </div>`;
 
@@ -342,11 +365,20 @@ function renderCumulativePnlChart(container, points) {
   const pnlPoints = valid.map((p, i) => `${x(i).toFixed(1)},${y(p.unrealized_pnl_usd).toFixed(1)}`).join(' ');
   const lastPnl = pnls[pnls.length - 1];
   const strokeColor = lastPnl >= 0 ? 'var(--up)' : 'var(--down)';
+  const gradId = `plotgrad-${Math.random().toString(36).slice(2, 9)}`;
+  const fillPath = `M${x(0).toFixed(1)},${(H - pad).toFixed(1)} L${pnlPoints.split(' ').join(' L')} L${x(n - 1).toFixed(1)},${(H - pad).toFixed(1)} Z`;
 
   container.innerHTML = `
     <svg viewBox="0 0 ${W} ${H}" class="w-full h-auto">
+      <defs>
+        <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${strokeColor}" stop-opacity="0.28"/>
+          <stop offset="100%" stop-color="${strokeColor}" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <path d="${fillPath}" fill="url(#${gradId})"/>
       ${zeroInRange ? `<line x1="${pad}" y1="${zeroY}" x2="${W - pad}" y2="${zeroY}" stroke="var(--border-strong)" stroke-width="1" stroke-dasharray="2 2" />` : ''}
-      <polyline points="${pnlPoints}" fill="none" stroke="${strokeColor}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <polyline points="${pnlPoints}" fill="none" stroke="${strokeColor}" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round"/>
     </svg>
     <div class="flex justify-between items-center text-[10px] font-mono text-faint mt-1 px-1">
       <span>${new Date(valid[0].ts).toLocaleDateString()}</span>
