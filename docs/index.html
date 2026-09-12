@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CryptoPulse V4 — Terminal</title>
 <script>
-  // Apply saved theme before first paint (avoids a flash of the wrong theme).
   (function () {
     var saved = localStorage.getItem('v4-theme');
     var theme = saved || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
@@ -14,7 +13,7 @@
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link href="theme.css" rel="stylesheet">
+<link href="theme.css?v=4.0.1" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
   tailwind.config = {
@@ -70,7 +69,7 @@
   </footer>
 </div>
 
-<script src="app.js"></script>
+<script src="app.js?v=4.0.1"></script>
 <script>
 renderNav('index.html');
 (async function () {
@@ -133,7 +132,7 @@ renderNav('index.html');
     } else {
       const pnlColor = s.unrealizedPnl == null ? 'text-faint' : s.unrealizedPnl >= 0 ? 'text-up' : 'text-down';
       teaser.innerHTML = `<div class="flex items-center justify-between">
-        <span class="font-mono text-lg">${s.totalValue != null ? '$' + s.totalValue.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—'}</span>
+        <span class="font-mono text-lg">${s.totalValue != null ? fmtUsd(s.totalValue) : '—'}</span>
         <span class="font-mono text-sm ${pnlColor}">${s.unrealizedPnlPct != null ? fmtPct(s.unrealizedPnlPct) : '—'}</span>
       </div>`;
     }
