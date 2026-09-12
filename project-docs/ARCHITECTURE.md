@@ -22,7 +22,7 @@ Hyperliquid candleSnapshot (BTC/ETH/LINK, 1h)
   -> engine/explain.js            AI explanation layer (Gemini, or deterministic fallback)
   -> D1 (worker/db.js)
   -> API (worker/index.js)
-  -> frontend/ (static, GitHub Pages)
+  -> docs/ (static, GitHub Pages)
 ```
 
 Every engine module is pure (no I/O), and is directly unit tested (`tests/`).
@@ -71,7 +71,10 @@ Don't guess — check the logs first, same as the V2 diagnosis.
   every push/PR, then runs `wrangler deploy` on push to `main` (needs the
   `CLOUDFLARE_API_TOKEN` repo secret — not something this pipeline can set for
   itself; add it once in GitHub repo settings).
-- **Frontend**: `frontend/` is static HTML/CSS/JS — deploy via GitHub Pages
-  (Settings → Pages → source: `main` branch, `/frontend` folder), same pattern
-  as V1. Set `window.V4_API_BASE` in `frontend/app.js` to the deployed Worker's
+- **Frontend**: `docs/` is static HTML/CSS/JS — deploy via GitHub Pages
+  (Settings → Pages → source: `main` branch, `/docs` folder). Legacy Pages
+  builds only accept `/` or `/docs` as a path — that's why the site lives in
+  `docs/` rather than `frontend/`, and why engineering docs moved to
+  `project-docs/` instead. Set `window.V4_API_BASE` in `docs/app.js` to the
+  deployed Worker's
   URL after the first `wrangler deploy`.
