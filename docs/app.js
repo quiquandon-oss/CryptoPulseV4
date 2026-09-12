@@ -73,12 +73,102 @@ const NAV_PAGES = [
 ];
 
 function renderNav(activeHref) {
-  const el = document.getElementById('siteNav');
-  if (!el) return;
-  el.innerHTML = NAV_PAGES.map((p) => {
-    const active = p.href === activeHref;
-    return `<a href="${p.href}" class="text-xs px-3 py-1.5 rounded-md font-mono transition-colors ${active ? 'bg-accent-soft text-accent border border-accent-30' : 'text-faint hover-text-muted hover-bg-surface'}">${p.label}</a>`;
-  }).join('');
+  // Desktop Top Nav
+  const topEl = document.getElementById('siteNav');
+  if (topEl) {
+    topEl.className = 'hidden md:flex items-center gap-1 mb-6 overflow-x-auto desktop-nav-only';
+    topEl.innerHTML = NAV_PAGES.map((p) => {
+      const active = p.href === activeHref;
+      return `<a href="${p.href}" class="text-xs px-3 py-1.5 rounded-md font-mono transition-colors ${active ? 'bg-accent-soft text-accent border border-accent-30 font-medium' : 'text-faint hover-text-muted hover-bg-surface'}">${p.label}</a>`;
+    }).join('');
+  }
+
+  // Mobile Bottom Nav
+  let bottomNav = document.getElementById('mobileBottomNav');
+  if (!bottomNav) {
+    bottomNav = document.createElement('nav');
+    bottomNav.id = 'mobileBottomNav';
+    bottomNav.className = 'bottom-nav mobile-nav-only md:hidden';
+    document.body.appendChild(bottomNav);
+  }
+
+  const isMoreActive = activeHref === 'audit.html' || activeHref === 'settings.html' || activeHref === 'asset.html';
+
+  bottomNav.innerHTML = `
+    <div class="grid grid-cols-5 h-full max-w-lg mx-auto">
+      <a href="index.html" class="bottom-nav-item ${activeHref === 'index.html' ? 'active' : ''}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        <span>Dashboard</span>
+      </a>
+      <a href="portfolio.html" class="bottom-nav-item ${activeHref === 'portfolio.html' ? 'active' : ''}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+        <span>My Assets</span>
+      </a>
+      <a href="performance.html" class="bottom-nav-item ${activeHref === 'performance.html' ? 'active' : ''}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+        <span>Performance</span>
+      </a>
+      <a href="health.html" class="bottom-nav-item ${activeHref === 'health.html' ? 'active' : ''}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        <span>Health</span>
+      </a>
+      <button id="moreNavBtn" type="button" class="bottom-nav-item ${isMoreActive ? 'active' : ''}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+        <span>More</span>
+      </button>
+    </div>
+    <div id="moreNavMenu" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex flex-col justify-end p-4">
+      <div class="bg-surface border border-border rounded-xl p-4 max-w-sm w-full mx-auto space-y-3 shadow-2xl">
+        <div class="flex items-center justify-between pb-2 border-b border-border">
+          <span class="font-mono text-xs font-semibold uppercase text-faint">More Options</span>
+          <button id="closeMoreNav" class="text-faint hover:text-ink text-sm p-1 font-mono">&times;</button>
+        </div>
+        <div class="space-y-1 font-mono text-xs">
+          <p class="text-[10px] text-faint uppercase tracking-wider py-1 font-semibold">Signals & Assets</p>
+          <div class="grid grid-cols-3 gap-2">
+            <a href="asset.html?asset=BTC" class="flex flex-col items-center justify-center p-2 rounded bg-elevated border border-border hover:border-accent">
+              <span class="font-semibold text-accent">BTC</span>
+              <span class="text-[9px] text-faint">Signal</span>
+            </a>
+            <a href="asset.html?asset=ETH" class="flex flex-col items-center justify-center p-2 rounded bg-elevated border border-border hover:border-accent">
+              <span class="font-semibold text-accent">ETH</span>
+              <span class="text-[9px] text-faint">Signal</span>
+            </a>
+            <a href="asset.html?asset=LINK" class="flex flex-col items-center justify-center p-2 rounded bg-elevated border border-border hover:border-accent">
+              <span class="font-semibold text-accent">LINK</span>
+              <span class="text-[9px] text-faint">Signal</span>
+            </a>
+          </div>
+          <div class="pt-2 space-y-1">
+            <a href="audit.html" class="flex items-center justify-between p-2.5 rounded bg-elevated hover-bg-surface border border-border">
+              <span class="font-medium text-ink">Audit & Evidence Logs</span>
+              <span class="text-faint">&rarr;</span>
+            </a>
+            <a href="settings.html" class="flex items-center justify-between p-2.5 rounded bg-elevated hover-bg-surface border border-border">
+              <span class="font-medium text-ink">System Settings</span>
+              <span class="text-faint">&rarr;</span>
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const moreBtn = document.getElementById('moreNavBtn');
+  const moreMenu = document.getElementById('moreNavMenu');
+  const closeBtn = document.getElementById('closeMoreNav');
+
+  if (moreBtn && moreMenu) {
+    moreBtn.addEventListener('click', () => {
+      moreMenu.classList.remove('hidden');
+    });
+    closeBtn?.addEventListener('click', () => {
+      moreMenu.classList.add('hidden');
+    });
+    moreMenu.addEventListener('click', (e) => {
+      if (e.target === moreMenu) moreMenu.classList.add('hidden');
+    });
+  }
 }
 
 document.addEventListener('DOMContentLoaded', initThemeToggle);

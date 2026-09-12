@@ -20,146 +20,197 @@
 </script>
 </head>
 <body class="bg-base text-ink font-sans min-h-screen">
-<div class="max-w-3xl mx-auto px-4 sm:px-6 py-8">
+<div class="max-w-3xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
 
   <div class="flex items-center justify-between mb-3">
     <a href="index.html" class="text-xs text-faint hover-text-muted font-mono">&larr; Dashboard</a>
-    <button class="theme-toggle" aria-label="Toggle theme" title="Toggle light/dark theme">
+    <button class="theme-toggle touch-target" aria-label="Toggle theme" title="Toggle light/dark theme">
       <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
       <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/></svg>
     </button>
   </div>
 
-  <nav id="siteNav" class="flex items-center gap-1 mb-4 overflow-x-auto"></nav>
+  <nav id="siteNav" class="mb-4"></nav>
 
-  <header class="mb-6 pb-4 border-b border-border flex items-baseline justify-between">
+  <!-- 1. ASSET HEADER & PRICE / 24H CHANGE -->
+  <header class="mb-5 pb-4 border-b border-border flex items-center justify-between font-mono">
     <div>
-      <h1 id="assetTitle" class="font-mono font-semibold text-2xl tracking-tight">—</h1>
-      <p id="assetPrice" class="text-xs font-mono text-faint mt-1"></p>
+      <div class="flex items-center gap-2">
+        <h1 id="assetTitle" class="font-semibold text-2xl tracking-tight text-ink">—</h1>
+        <span id="assetSymbolBadge" class="text-[10px] font-semibold text-accent uppercase bg-accent-soft px-2 py-0.5 rounded border border-accent-30">Asset</span>
+      </div>
+      <p id="assetPrice" class="text-sm text-ink font-semibold mt-1">Loading price…</p>
     </div>
-    <span class="text-xs font-mono text-faint uppercase bg-surface px-2.5 py-1 rounded border border-border">Market Intelligence</span>
+    <div class="text-right">
+      <span class="text-[10px] text-faint uppercase block">24h Change</span>
+      <span id="assetChange24h" class="text-xs font-semibold text-faint">—</span>
+    </div>
   </header>
 
-  <!-- Deterministic Signal Panel -->
-  <section id="signalSection" class="mb-6 bg-surface border border-border rounded-lg p-4">
-    <p class="text-sm font-mono text-faint">Loading signal…</p>
+  <!-- 2. SIGNAL & RISK CARD -->
+  <section id="signalSection" class="mb-5 bg-surface border border-border rounded-xl p-4 shadow-sm font-mono">
+    <p class="text-xs text-faint">Loading signal…</p>
   </section>
 
-  <!-- Personal Holding / Position Panel -->
-  <section id="positionSection" class="mb-6 bg-surface border border-border rounded-lg p-4">
-    <h2 class="text-xs font-mono text-faint uppercase tracking-wider mb-2">My Position Details</h2>
-    <div id="positionContent" class="text-sm font-mono">
-      <p class="text-xs text-faint">No position held for this asset.</p>
+  <!-- 3. INDICATOR EVIDENCE BREAKDOWN (COLLAPSIBLE ACCORDION) -->
+  <section class="mb-5 border border-border rounded-xl overflow-hidden bg-surface shadow-sm">
+    <div id="evidenceAccordionHeader" class="accordion-header open">
+      <div class="flex items-center gap-2">
+        <span class="text-xs font-mono font-semibold text-ink uppercase tracking-wide">3. Evidence &amp; Indicators</span>
+        <span id="evidenceCountBadge" class="text-[10px] font-mono text-accent bg-accent-soft px-1.5 py-0.5 rounded border border-accent-30">Facts</span>
+      </div>
+      <span class="accordion-chevron text-xs font-mono text-faint">&darr;</span>
     </div>
-  </section>
-
-  <!-- Price + Signal Timeline Chart -->
-  <section class="mb-6 bg-surface border border-border rounded-lg p-4">
-    <div class="flex items-center justify-between mb-3">
-      <h2 class="text-xs font-mono text-faint uppercase tracking-wider">7. Signal Timeline &amp; Price Visualization</h2>
-      <div id="rangeButtons" class="flex gap-1"></div>
-    </div>
-    <div id="chartContainer" class="p-2">
-      <div class="px-4 py-10 text-center text-sm font-mono text-faint">Loading chart…</div>
+    <div id="indicatorList" class="accordion-content p-0 divide-y divide-border">
+      <div class="p-4 text-xs font-mono text-faint">Loading indicators…</div>
     </div>
   </section>
 
-  <!-- Indicator Evidence Panel -->
-  <section class="mb-6 bg-surface border border-border rounded-lg overflow-hidden">
-    <div class="px-4 py-3 bg-elevated border-b border-border flex items-center justify-between">
-      <h2 class="text-xs font-mono text-faint uppercase tracking-wider">Indicator Evidence Breakdown</h2>
-      <span class="text-[10px] font-mono text-faint">Deterministic Facts</span>
+  <!-- 4. SIGNAL TIMELINE & PRICE CHART -->
+  <section class="mb-5 bg-surface border border-border rounded-xl p-4 shadow-sm space-y-3 font-mono">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+      <h2 class="text-xs font-semibold text-faint uppercase tracking-wider">Signal Timeline &amp; Price Chart</h2>
+      <div id="rangeButtons" class="flex gap-1 overflow-x-auto no-scrollbar"></div>
     </div>
-    <div id="indicatorList" class="divide-y divide-border"></div>
+    <div id="chartContainer" class="min-h-[160px] flex items-center justify-center p-1">
+      <p class="text-xs text-faint">Loading chart…</p>
+    </div>
   </section>
 
-  <!-- AI Explanation Panel -->
-  <section id="aiSection" class="mb-6 hidden bg-surface border border-accent-30 rounded-lg p-4">
-    <h2 class="text-xs font-mono text-accent uppercase tracking-wider mb-2">AI Interpretation Layer</h2>
-    <div class="text-xs font-mono space-y-2 text-ink" id="aiContent"></div>
+  <!-- 5. MY POSITION DETAILS -->
+  <section id="positionSection" class="mb-5 bg-surface border border-border rounded-xl p-4 shadow-sm font-mono space-y-2">
+    <h2 class="text-xs font-semibold text-faint uppercase tracking-wider">My Position</h2>
+    <div id="positionContent" class="text-xs text-faint">
+      <p>No position held for this asset.</p>
+    </div>
   </section>
 
-  <!-- Model Signal Performance -->
-  <section class="bg-surface border border-border rounded-lg overflow-hidden">
-    <div class="px-4 py-3 bg-elevated border-b border-border flex items-center justify-between">
-      <h2 class="text-xs font-mono text-faint uppercase tracking-wider">CryptoPulse Prediction Performance</h2>
-      <span class="text-[10px] font-mono text-faint">Resolved Outcomes</span>
+  <!-- 6. RESOLVED PREDICTION PERFORMANCE (COLLAPSIBLE ACCORDION) -->
+  <section class="mb-5 border border-border rounded-xl overflow-hidden bg-surface shadow-sm">
+    <div id="perfAccordionHeader" class="accordion-header">
+      <span class="text-xs font-mono font-semibold text-ink uppercase tracking-wide">Model Prediction Performance</span>
+      <span class="accordion-chevron text-xs font-mono text-faint">&darr;</span>
     </div>
-    <div id="perfList" class="divide-y divide-border">
-      <div class="px-4 py-4 text-sm font-mono text-faint">Loading performance metrics…</div>
+    <div id="perfList" class="accordion-content p-0 divide-y divide-border">
+      <div class="p-4 text-xs font-mono text-faint">Loading performance metrics…</div>
     </div>
+  </section>
+
+  <!-- 7. AI INTERPRETATION LAYER (COLLAPSIBLE ACCORDION) -->
+  <section id="aiSection" class="mb-6 hidden border border-accent-30 rounded-xl overflow-hidden bg-surface shadow-sm">
+    <div id="aiAccordionHeader" class="accordion-header open bg-accent-soft">
+      <span class="text-xs font-mono font-semibold text-accent uppercase tracking-wide">AI Interpretation Layer</span>
+      <span class="accordion-chevron text-xs font-mono text-faint">&darr;</span>
+    </div>
+    <div class="accordion-content p-4 text-xs font-mono space-y-2 text-ink" id="aiContent"></div>
   </section>
 
 </div>
 
 <script src="app.js"></script>
 <script>
-renderNav(null);
+renderNav('asset.html');
+
 (async function () {
   const params = new URLSearchParams(location.search);
   const asset = (params.get('asset') || 'BTC').toUpperCase();
   document.getElementById('assetTitle').textContent = asset;
+  document.getElementById('assetSymbolBadge').textContent = `${asset} Intelligence`;
 
   const dirColor = (d) => d === 'BULLISH' ? 'text-up' : d === 'BEARISH' ? 'text-down' : 'text-muted';
   const stateColor = (d) => d === 'BULLISH' ? 'text-up' : d === 'BEARISH' ? 'text-down' : 'text-faint';
+
+  // Accordions setup
+  ['evidenceAccordionHeader', 'perfAccordionHeader', 'aiAccordionHeader'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('click', () => el.classList.toggle('open'));
+    }
+  });
 
   try {
     const detail = await v4Fetch(`/api/assets/${asset}`);
     const s = detail.signal;
 
-    document.getElementById('assetPrice').textContent = `Evaluated ${new Date(s.ts).toLocaleString()}`;
+    // Price & 24h change
+    if (detail.price != null) {
+      document.getElementById('assetPrice').textContent = fmtUsd(detail.price);
+    } else if (s.price != null) {
+      document.getElementById('assetPrice').textContent = fmtUsd(s.price);
+    } else {
+      document.getElementById('assetPrice').textContent = `Evaluated ${new Date(s.ts).toLocaleTimeString()}`;
+    }
 
+    if (detail.change24h != null) {
+      const chg = detail.change24h;
+      const chgColor = chg >= 0 ? 'text-up' : 'text-down';
+      const chgSign = chg >= 0 ? '+' : '';
+      document.getElementById('assetChange24h').innerHTML = `<span class="${chgColor}">${chgSign}${(chg * 100).toFixed(2)}%</span>`;
+    } else {
+      document.getElementById('assetChange24h').textContent = '—';
+    }
+
+    // Signal Section
     document.getElementById('signalSection').innerHTML = `
-      <div class="flex items-baseline justify-between mb-3">
-        <span class="${dirColor(s.direction)} font-mono text-2xl font-semibold">${s.direction} ${s.score >= 0 ? '+' : ''}${s.score}</span>
+      <div class="flex items-baseline justify-between mb-3 border-b border-border pb-3">
+        <div>
+          <span class="text-[10px] text-faint uppercase block">Signal Direction & Score</span>
+          <span class="${dirColor(s.direction)} font-mono text-2xl font-bold">${s.direction} ${s.score >= 0 ? '+' : ''}${s.score}</span>
+        </div>
         <span class="badge ${s.risk === 'LOW' ? 'badge-up' : s.risk === 'HIGH' ? 'badge-down' : 'badge-warn'}">${s.risk} RISK</span>
       </div>
       <div class="grid grid-cols-2 gap-3 text-xs font-mono">
-        <div><span class="text-faint block text-[10px] uppercase">Evidence Label</span>${escapeHtml(s.evidence_label)}</div>
-        <div><span class="text-faint block text-[10px] uppercase">Regime</span>${s.regime.replaceAll('_', ' ')}</div>
-        <div><span class="text-faint block text-[10px] uppercase">Persistence</span>${s.persistence_count} consecutive eval${s.persistence_count === 1 ? '' : 's'}</div>
-        <div><span class="text-faint block text-[10px] uppercase">Stability</span><span class="${s.stability === 'UNSTABLE' ? 'text-warn' : 'text-up'}">${s.stability}</span></div>
+        <div><span class="text-faint block text-[10px] uppercase">Evidence Basis</span><span class="font-medium text-ink">${escapeHtml(s.evidence_label)}</span></div>
+        <div><span class="text-faint block text-[10px] uppercase">Market Regime</span><span class="font-medium text-ink">${s.regime.replaceAll('_', ' ')}</span></div>
+        <div><span class="text-faint block text-[10px] uppercase">Persistence</span><span class="font-medium text-ink">${s.persistence_count} consecutive eval${s.persistence_count === 1 ? '' : 's'}</span></div>
+        <div><span class="text-faint block text-[10px] uppercase">Stability</span><span class="${s.stability === 'UNSTABLE' ? 'text-warn font-semibold' : 'text-up font-semibold'}">${s.stability}</span></div>
       </div>`;
 
-    document.getElementById('indicatorList').innerHTML = detail.indicators
-      .sort((a, b) => a.indicator.localeCompare(b.indicator))
-      .map((i) => `
-        <div class="px-4 py-3 flex items-center justify-between gap-4">
-          <span class="font-mono text-xs font-medium w-24 shrink-0">${i.indicator}</span>
-          <span class="text-xs text-muted flex-1 font-sans">${escapeHtml(i.interpretation || 'Insufficient history')}</span>
-          <span class="${stateColor(i.direction)} text-xs font-mono shrink-0 font-medium">${i.applicable ? i.direction : '—'}</span>
-        </div>`).join('');
+    // Indicators list
+    const indicators = (detail.indicators || []).sort((a, b) => a.indicator.localeCompare(b.indicator));
+    document.getElementById('evidenceCountBadge').textContent = `${indicators.length} Indicators`;
+    document.getElementById('indicatorList').innerHTML = indicators.map((i) => `
+      <div class="px-4 py-3 flex items-center justify-between gap-3 text-xs font-mono">
+        <span class="font-semibold text-ink w-20 shrink-0">${i.indicator}</span>
+        <span class="text-muted flex-1 text-[11px] font-sans truncate">${escapeHtml(i.interpretation || 'Insufficient history')}</span>
+        <span class="${stateColor(i.direction)} shrink-0 font-semibold">${i.applicable ? i.direction : '—'}</span>
+      </div>`).join('');
 
+    // Position section
     if (detail.position) {
       const p = detail.position;
       const pnlColor = p.pnl == null ? 'text-faint' : p.pnl >= 0 ? 'text-up' : 'text-down';
+      const pnlSign = p.pnl != null && p.pnl >= 0 ? '+' : '';
+
       document.getElementById('positionContent').innerHTML = `
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-elevated p-3 rounded border border-border">
-          <div><span class="text-faint block text-[10px] uppercase">Quantity</span>${p.quantity.toFixed(4)} ${asset}</div>
-          <div><span class="text-faint block text-[10px] uppercase">Avg Buy Price</span>${fmtUsd(p.avgCost)}</div>
-          <div><span class="text-faint block text-[10px] uppercase">Position Value</span>${fmtUsd(p.value)}</div>
-          <div><span class="text-faint block text-[10px] uppercase">Unrealized P/L</span><span class="${pnlColor}">${p.pnl != null ? (p.pnl >= 0 ? '+' : '') + fmtUsd(p.pnl) + ' (' + fmtPct(p.pnlPct) + ')' : '—'}</span></div>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-elevated p-3 rounded-lg border border-border text-xs font-mono">
+          <div><span class="text-faint block text-[10px] uppercase">Quantity</span><span class="font-semibold text-ink">${p.quantity.toFixed(4)} ${asset}</span></div>
+          <div><span class="text-faint block text-[10px] uppercase">Avg Buy Price</span><span class="font-semibold text-ink">${fmtUsd(p.avgCost)}</span></div>
+          <div><span class="text-faint block text-[10px] uppercase">Position Value</span><span class="font-semibold text-ink">${fmtUsd(p.value)}</span></div>
+          <div><span class="text-faint block text-[10px] uppercase">Unrealized P/L</span><span class="${pnlColor} font-semibold">${p.pnl != null ? pnlSign + fmtUsd(p.pnl) + ' (' + fmtPct(p.pnlPct) + ')' : '—'}</span></div>
         </div>`;
     } else {
-      document.getElementById('positionContent').innerHTML = `<p class="text-xs font-mono text-faint">No position held for ${asset}.</p>`;
+      document.getElementById('positionContent').innerHTML = `<p class="text-xs font-mono text-faint">No active position held for ${asset}.</p>`;
     }
 
+    // AI Section
     if (detail.explanation) {
       const supports = JSON.parse(detail.explanation.supports || '[]');
       const contradicts = JSON.parse(detail.explanation.contradicts || '[]');
       const risks = JSON.parse(detail.explanation.risks || '[]');
       document.getElementById('aiSection').classList.remove('hidden');
       document.getElementById('aiContent').innerHTML = `
-        ${supports.length ? `<p><span class="text-up">Supports:</span> ${escapeHtml(supports.join(' '))}</p>` : ''}
-        ${contradicts.length ? `<p><span class="text-down">Contradicts:</span> ${escapeHtml(contradicts.join(' '))}</p>` : ''}
-        ${risks.length ? `<p><span class="text-warn">Risks:</span> ${escapeHtml(risks.join(' '))}</p>` : ''}
-        ${detail.explanation.invalidation ? `<p><span class="text-muted">Invalidation:</span> ${escapeHtml(detail.explanation.invalidation)}</p>` : ''}
-        <p class="text-[10px] text-faint pt-1">Model: ${escapeHtml(detail.explanation.model)}</p>`;
+        ${supports.length ? `<p><span class="text-up font-semibold">Supports:</span> ${escapeHtml(supports.join(' '))}</p>` : ''}
+        ${contradicts.length ? `<p><span class="text-down font-semibold">Contradicts:</span> ${escapeHtml(contradicts.join(' '))}</p>` : ''}
+        ${risks.length ? `<p><span class="text-warn font-semibold">Risks:</span> ${escapeHtml(risks.join(' '))}</p>` : ''}
+        ${detail.explanation.invalidation ? `<p><span class="text-muted font-semibold">Invalidation:</span> ${escapeHtml(detail.explanation.invalidation)}</p>` : ''}
+        <p class="text-[10px] text-faint pt-1 border-t border-border">Model: ${escapeHtml(detail.explanation.model)}</p>`;
     }
   } catch (err) {
-    document.getElementById('signalSection').innerHTML = `<p class="text-sm font-mono text-down">Could not load signal: ${escapeHtml(err.message)}</p>`;
+    document.getElementById('signalSection').innerHTML = `<p class="text-xs font-mono text-down">Could not load signal details: ${escapeHtml(err.message)}</p>`;
   }
 
+  // Price & Signal Timeline Chart
   const ranges = ['12h', '24h', '7d', '30d'];
   let activeRange = '7d';
   const rangeBtnEl = document.getElementById('rangeButtons');
@@ -167,7 +218,7 @@ renderNav(null);
 
   function renderRangeButtons() {
     rangeBtnEl.innerHTML = ranges.map((r) =>
-      `<button data-range="${r}" class="text-[10px] font-mono px-2 py-0.5 rounded border ${r === activeRange ? 'border-accent-30 bg-accent-soft text-accent' : 'border-border text-faint hover-bg-elevated'}">${r}</button>`
+      `<button data-range="${r}" class="text-[10px] font-mono px-2.5 py-1 rounded-md border transition-all ${r === activeRange ? 'border-accent-30 bg-accent-soft text-accent font-semibold' : 'border-border text-faint hover:text-muted hover:bg-elevated'}">${r}</button>`
     ).join('');
     rangeBtnEl.querySelectorAll('button').forEach((btn) => {
       btn.addEventListener('click', () => { activeRange = btn.dataset.range; renderRangeButtons(); loadChart(); });
@@ -175,30 +226,31 @@ renderNav(null);
   }
 
   async function loadChart() {
-    chartEl.innerHTML = '<div class="px-4 py-10 text-center text-sm font-mono text-faint">Loading chart…</div>';
+    chartEl.innerHTML = '<div class="px-4 py-8 text-center text-xs font-mono text-faint">Loading chart…</div>';
     try {
       const { points } = await v4Fetch(`/api/assets/${asset}/history?range=${activeRange}`);
       renderPriceSignalChart(chartEl, points);
     } catch (err) {
-      chartEl.innerHTML = `<div class="px-4 py-6 text-sm font-mono text-down">${escapeHtml(err.message)}</div>`;
+      renderDataState(chartEl, 'ERROR', err.message);
     }
   }
 
   renderRangeButtons();
   loadChart();
 
+  // Resolved Model Performance
   try {
     const perf = await v4Fetch(`/api/assets/${asset}/performance`);
-    const rows = perf.performance.filter((r) => r.regime === 'ALL');
+    const rows = (perf.performance || []).filter((r) => r.regime === 'ALL');
     document.getElementById('perfList').innerHTML = rows.length ? rows.map((r) => `
       <div class="px-4 py-3 flex items-center justify-between font-mono text-xs">
-        <span class="font-medium">${r.horizon} Horizon</span>
+        <span class="font-semibold text-ink">${r.horizon} Horizon</span>
         ${r.status === 'OK'
-          ? `<span>${fmtPct(r.win_rate)} win rate <span class="text-faint">(${r.samples} resolved)</span></span>`
+          ? `<span class="font-semibold text-ink">${fmtPct(r.win_rate)} win rate <span class="text-faint font-normal">(${r.samples} resolved)</span></span>`
           : `<span class="text-faint">INSUFFICIENT_DATA (${r.samples} resolved sample${r.samples === 1 ? '' : 's'})</span>`}
-      </div>`).join('') : '<div class="px-4 py-4 text-sm font-mono text-faint">No model performance metrics computed yet.</div>';
+      </div>`).join('') : '<div class="px-4 py-4 text-xs font-mono text-faint">No model performance metrics computed yet.</div>';
   } catch (err) {
-    document.getElementById('perfList').innerHTML = `<div class="px-4 py-4 text-sm font-mono text-down">${escapeHtml(err.message)}</div>`;
+    document.getElementById('perfList').innerHTML = `<div class="px-4 py-4 text-xs font-mono text-down">${escapeHtml(err.message)}</div>`;
   }
 })();
 </script>
