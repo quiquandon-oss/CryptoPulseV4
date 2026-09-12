@@ -185,8 +185,18 @@ function renderPortfolioValueChart(container, points) {
     return;
   }
   const W = 600, H = 180, pad = 12;
-  const allVals = valid.flatMap((p) => [p.total_value_usd, p.invested_capital_usd]).filter((v) => v != null);
-  const min = Math.min(...allVals), max = Math.max(...allVals);
+  // Scale to total_value_usd's OWN range, not combined with invested_capital_usd.
+  // Invested capital is often far from current value (e.g. a portfolio down
+  // 20%) — sharing one axis compresses the more interesting value line down
+  // to a sliver near one edge, regardless of how many points there are.
+  // The invested line still plots on this same scale and simply clips at the
+  // SVG edge when it falls outside the value line's range — a flat reference
+  // line running off-screen is more legible than crushing the value line to
+  // show it in full.
+  const vals = valid.map((p) => p.total_value_usd);
+  const rawMin = Math.min(...vals), rawMax = Math.max(...vals);
+  const breathing = (rawMax - rawMin) * 0.12 || Math.abs(rawMax) * 0.02 || 1;
+  const min = rawMin - breathing, max = rawMax + breathing;
   const range = (max - min) || 1;
   const n = valid.length;
   const x = (i) => pad + (i / (n - 1)) * (W - pad * 2);
@@ -195,6 +205,8 @@ function renderPortfolioValueChart(container, points) {
   const valueLine = valid.map((p, i) => `${x(i).toFixed(1)},${y(p.total_value_usd).toFixed(1)}`).join(' ');
   const investedPoints = valid.filter((p) => p.invested_capital_usd != null);
   const investedLine = investedPoints.map((p) => `${x(valid.indexOf(p)).toFixed(1)},${y(p.invested_capital_usd).toFixed(1)}`).join(' ');
+  const lastInvested = investedPoints[investedPoints.length - 1]?.invested_capital_usd;
+  const investedOffScale = lastInvested != null && (lastInvested < min || lastInvested > max);
 
   container.innerHTML = `
     <svg viewBox="0 0 ${W} ${H}" class="w-full h-auto">
@@ -203,7 +215,7 @@ function renderPortfolioValueChart(container, points) {
     </svg>
     <div class="flex justify-between items-center text-[10px] font-mono text-faint mt-1 px-1">
       <span>${new Date(valid[0].ts).toLocaleDateString()}</span>
-      <span><span class="text-accent">— </span>value &nbsp; <span class="text-faint">- - </span>invested</span>
+      <span><span class="text-accent">— </span>value &nbsp; <span class="text-faint">- - </span>invested${investedOffScale ? ` (${fmtUsd(lastInvested)}, off-scale)` : ''}</span>
       <span>${new Date(valid[n - 1].ts).toLocaleDateString()}</span>
     </div>`;
 }
@@ -216,13 +228,20 @@ function renderCumulativePnlChart(container, points) {
     return;
   }
   const W = 600, H = 160, pad = 12;
+  // Scale to the P/L series' own range — do NOT force 0 into it. A portfolio
+  // sitting consistently around -$700 gets squashed near one edge if the
+  // range is forced to span all the way up to 0; the day-to-day P/L movement
+  // that's actually the point of this chart is what should fill the space.
   const pnls = valid.map((p) => p.unrealized_pnl_usd);
-  const min = Math.min(0, ...pnls), max = Math.max(0, ...pnls);
+  const rawMin = Math.min(...pnls), rawMax = Math.max(...pnls);
+  const breathing = (rawMax - rawMin) * 0.12 || Math.abs(rawMax) * 0.02 || 1;
+  const min = rawMin - breathing, max = rawMax + breathing;
   const range = (max - min) || 1;
   const n = valid.length;
   const x = (i) => pad + (i / (n - 1)) * (W - pad * 2);
   const y = (v) => H - pad - ((v - min) / range) * (H - pad * 2);
   const zeroY = y(0);
+  const zeroInRange = zeroY >= pad && zeroY <= H - pad;
 
   const pnlPoints = valid.map((p, i) => `${x(i).toFixed(1)},${y(p.unrealized_pnl_usd).toFixed(1)}`).join(' ');
   const lastPnl = pnls[pnls.length - 1];
@@ -230,7 +249,7 @@ function renderCumulativePnlChart(container, points) {
 
   container.innerHTML = `
     <svg viewBox="0 0 ${W} ${H}" class="w-full h-auto">
-      <line x1="${pad}" y1="${zeroY}" x2="${W - pad}" y2="${zeroY}" stroke="var(--border-strong)" stroke-width="1" stroke-dasharray="2 2" />
+      ${zeroInRange ? `<line x1="${pad}" y1="${zeroY}" x2="${W - pad}" y2="${zeroY}" stroke="var(--border-strong)" stroke-width="1" stroke-dasharray="2 2" />` : ''}
       <polyline points="${pnlPoints}" fill="none" stroke="${strokeColor}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
     </svg>
     <div class="flex justify-between items-center text-[10px] font-mono text-faint mt-1 px-1">
@@ -305,7 +324,9 @@ function renderBenchmarkChart(container, benchmarkData) {
   const points = benchmarkData.points;
   const W = 600, H = 180, pad = 12;
   const allVals = points.flatMap((p) => [p.portfolioNormalized, p.btcNormalized]).filter((v) => v != null);
-  const min = Math.min(...allVals), max = Math.max(...allVals);
+  const rawMin = Math.min(...allVals), rawMax = Math.max(...allVals);
+  const breathing = (rawMax - rawMin) * 0.08 || 1;
+  const min = rawMin - breathing, max = rawMax + breathing;
   const range = (max - min) || 1;
   const n = points.length;
   const x = (i) => pad + (i / (n - 1)) * (W - pad * 2);
