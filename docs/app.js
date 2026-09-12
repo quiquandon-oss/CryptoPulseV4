@@ -7,7 +7,11 @@ async function v4Fetch(path) {
   return res.json();
 }
 
-const FRESHNESS_DOT = { LIVE: 'bg-up', RECENT: 'bg-recent', STALE: 'bg-stale', UNAVAILABLE: 'bg-unavailable', OK: 'bg-up', ERROR: 'bg-unavailable' };
+// Note: CSS class names below don't match their own colors (bg-recent is
+// amber/--warn, bg-stale is red/--down — a historical naming mismatch, not
+// touched here to avoid a wider CSS rename). Reused by color, not by name,
+// to match health.html's severity mapping: green/amber/red for OK/STALE/UNAVAILABLE.
+const FRESHNESS_DOT = { LIVE: 'bg-up', RECENT: 'bg-up', STALE: 'bg-recent', UNAVAILABLE: 'bg-stale', OK: 'bg-up', ERROR: 'bg-stale' };
 const DIRECTION_COLOR = { BULLISH: 'text-up', BEARISH: 'text-down', NEUTRAL: 'text-muted' };
 
 function fmtAge(ms) {

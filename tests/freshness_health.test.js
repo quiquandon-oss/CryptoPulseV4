@@ -5,15 +5,16 @@ import { aggregateHealth } from '../engine/health.js';
 
 const NOW = 1_700_000_000_000;
 
-test('classifyFreshness: LIVE just under 5 minutes old', () => {
-  assert.equal(classifyFreshness(NOW - 4 * 60_000, NOW).state, FRESHNESS.LIVE);
+test('classifyFreshness: LIVE just under 15 minutes old', () => {
+  assert.equal(classifyFreshness(NOW - 14 * 60_000, NOW).state, FRESHNESS.LIVE);
 });
 
-test('classifyFreshness: RECENT between 5 and 30 minutes old', () => {
+test('classifyFreshness: RECENT covers the normal hourly-candle cycle, up to 70 minutes', () => {
   assert.equal(classifyFreshness(NOW - 20 * 60_000, NOW).state, FRESHNESS.RECENT);
+  assert.equal(classifyFreshness(NOW - 65 * 60_000, NOW).state, FRESHNESS.RECENT, 'a candle 65m old is still within one normal hourly cycle, not stale');
 });
 
-test('classifyFreshness: STALE between 30 minutes and 3 hours old', () => {
+test('classifyFreshness: STALE between 70 minutes (one missed cycle) and 3 hours old', () => {
   assert.equal(classifyFreshness(NOW - 90 * 60_000, NOW).state, FRESHNESS.STALE);
 });
 
@@ -28,6 +29,12 @@ test('classifyFreshness: never reports LIVE for a timestamp in the future (clock
 
 test('aggregateHealth: all LIVE components roll up to overall LIVE', () => {
   const result = aggregateHealth([{ component: 'BTC', status: 'LIVE' }, { component: 'DB', status: 'OK' }]);
+  assert.equal(result.overall, 'LIVE');
+  assert.deepEqual(result.issues, []);
+});
+
+test('aggregateHealth: RECENT is normal for an hourly cadence, not degraded — a healthy system reads this way most of every hour', () => {
+  const result = aggregateHealth([{ component: 'BTC', status: 'RECENT' }, { component: 'DB', status: 'OK' }]);
   assert.equal(result.overall, 'LIVE');
   assert.deepEqual(result.issues, []);
 });

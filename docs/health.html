@@ -81,25 +81,39 @@ renderNav('health.html');
       el.innerHTML = '<div class="text-xs font-mono text-faint">No portfolio transactions recorded.</div>';
     } else {
       const fmt = (ts) => ts ? new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+      const snapN = h.snapshots?.n ?? 0;
       el.innerHTML = `
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
+        <p class="text-[10px] text-faint uppercase tracking-wider mb-1.5">Transaction ledger</p>
+        <div class="grid grid-cols-3 gap-3 text-xs font-mono mb-3">
           <div class="bg-elevated p-3 rounded-lg border border-border">
             <span class="text-[10px] text-faint uppercase block">Transactions</span>
             <span class="font-semibold text-sm text-ink block mt-0.5">${h.transactions.n}</span>
           </div>
           <div class="bg-elevated p-3 rounded-lg border border-border">
-            <span class="text-[10px] text-faint uppercase block">Equity Snapshots</span>
-            <span class="font-semibold text-sm text-ink block mt-0.5">${h.snapshots?.n ?? 2}</span>
-          </div>
-          <div class="bg-elevated p-3 rounded-lg border border-border">
-            <span class="text-[10px] text-faint uppercase block">Earliest Record</span>
+            <span class="text-[10px] text-faint uppercase block">Earliest</span>
             <span class="font-semibold text-xs sm:text-sm text-ink block mt-0.5 truncate">${fmt(h.transactions.earliest)}</span>
           </div>
           <div class="bg-elevated p-3 rounded-lg border border-border">
-            <span class="text-[10px] text-faint uppercase block">Latest Record</span>
+            <span class="text-[10px] text-faint uppercase block">Latest</span>
             <span class="font-semibold text-xs sm:text-sm text-ink block mt-0.5 truncate">${fmt(h.transactions.latest)}</span>
           </div>
-        </div>`;
+        </div>
+        <p class="text-[10px] text-faint uppercase tracking-wider mb-1.5">Equity curve (separate from the ledger above — see note)</p>
+        <div class="grid grid-cols-3 gap-3 text-xs font-mono">
+          <div class="bg-elevated p-3 rounded-lg border border-border">
+            <span class="text-[10px] text-faint uppercase block">Snapshots</span>
+            <span class="font-semibold text-sm text-ink block mt-0.5">${snapN}</span>
+          </div>
+          <div class="bg-elevated p-3 rounded-lg border border-border">
+            <span class="text-[10px] text-faint uppercase block">Earliest</span>
+            <span class="font-semibold text-xs sm:text-sm text-ink block mt-0.5 truncate">${fmt(h.snapshots?.earliest)}</span>
+          </div>
+          <div class="bg-elevated p-3 rounded-lg border border-border">
+            <span class="text-[10px] text-faint uppercase block">Latest</span>
+            <span class="font-semibold text-xs sm:text-sm text-ink block mt-0.5 truncate">${fmt(h.snapshots?.latest)}</span>
+          </div>
+        </div>
+        <p class="text-[10px] text-faint mt-2">The ledger goes back to your first transaction; the equity curve only covers however long snapshots have actually been logged — they cover different spans on purpose.</p>`;
     }
   } catch (err) {
     el.innerHTML = `<div class="text-xs font-mono text-down">${escapeHtml(err.message)}</div>`;
@@ -108,8 +122,8 @@ renderNav('health.html');
 
 (async function loadSystemHealth() {
   const stateBadgeClass = {
-    LIVE: 'badge-up', OK: 'badge-up',
-    RECENT: 'badge-warn', STALE: 'badge-warn',
+    LIVE: 'badge-up', OK: 'badge-up', RECENT: 'badge-up',
+    STALE: 'badge-warn',
     UNAVAILABLE: 'badge-down', ERROR: 'badge-down'
   };
 
