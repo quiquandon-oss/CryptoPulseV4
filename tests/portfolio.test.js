@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  parseNeverlessCSV, parseRevolutRows, computeHoldings, computePortfolioSummary,
+  parseNeverlessCSV, parseRevolutRows, parseV1Export, computeHoldings, computePortfolioSummary,
   dedupeTransactions, TRACKED_ASSETS,
 } from '../engine/portfolio.js';
 
@@ -98,6 +98,19 @@ test('parseRevolutRows: "Buy - Revolut X" is a real purchase, not a type to drop
   assert.equal(tx.unitPriceUsd, 7.75);
 });
 
+test('parseRevolutRows: a $-prefixed price is already USD and must NOT be multiplied by the EUR rate again', () => {
+  const rows = [{ Symbol: 'LINK', Type: 'Buy - Revolut X', Quantity: '2.057306', Price: '$7.75', Date: 'Jul 2, 2026, 6:32:44\u00e2\u0080\u00afPM' }];
+  const [tx] = parseRevolutRows(rows, 1.35); // a deliberately non-1.0 rate to catch accidental double-conversion
+  assert.equal(tx.unitPriceUsd, 7.75, 'a USD-prefixed price must pass through unchanged regardless of the EUR rate supplied');
+});
+
+test('parseRevolutRows: excludes rows priced in a currency with no reliable conversion (IDR seen in practice), rather than fabricating a rate', () => {
+  // Real row found in an actual export: a tiny fractional buy priced in Indonesian Rupiah,
+  // not EUR — treating the raw number as EUR would inflate it by roughly 100,000x.
+  const rows = [{ Symbol: 'LINK', Type: 'Buy', Quantity: '0.00000475', Price: '138,920.02 IDR', Value: '0.66 IDR', Date: 'Jul 8, 2026, 10:34:26\u00e2\u0080\u00afAM' }];
+  assert.deepEqual(parseRevolutRows(rows, 1.10), []);
+});
+
 test('parseRevolutRows: "Staking reward" is a real quantity increase with an honest $0 cost basis, not fabricated FMV', () => {
   const rows = [{ Symbol: 'ETH', Type: 'Staking reward', Quantity: '0.00000402', Price: '', Date: 'Jul 22, 2026, 9:41:17\u00e2\u0080\u00afAM' }];
   const [tx] = parseRevolutRows(rows, 1.1);
@@ -173,4 +186,28 @@ test('dedupeTransactions: repeated upload of the same rows is idempotent', () =>
 
 test('TRACKED_ASSETS: fixed to the 5 V1 assets, confirmed in scope rather than assumed', () => {
   assert.deepEqual([...TRACKED_ASSETS].sort(), ['BTC', 'ETH', 'HYPE', 'LINK', 'SOL']);
+});
+
+test('parseV1Export: a normal buy uses the pre-resolved per-unit USD price directly', () => {
+  const txs = [{ id: 'abc123', date: '2026-04-11', asset: 'BTC', acct: 'Neverless', type: 'buy', qty: 0.019379, price: 84715.15, ccy: 'EUR', usd: 99540.30125, eur: 84715.15 }];
+  const [tx] = parseV1Export(txs);
+  assert.equal(tx.asset, 'BTC');
+  assert.equal(tx.type, 'BUY');
+  assert.equal(tx.unitPriceUsd, 99540.30125);
+  assert.equal(tx.sourceId, 'v1_abc123');
+});
+
+test('parseV1Export: a reward row maps to TRANSFER_IN with $0 cost basis, not a fabricated value', () => {
+  const txs = [{ id: 'rwd1', date: '2026-09-11', asset: 'ETH', acct: 'Revolut', type: 'buy', qty: 1.7e-6, price: 0, ccy: 'EUR', eur: 0, usd: 0, isReward: true }];
+  const [tx] = parseV1Export(txs);
+  assert.equal(tx.type, 'TRANSFER_IN');
+  assert.equal(tx.unitPriceUsd, 0);
+});
+
+test('parseV1Export: skips non-tracked assets and non-buy types', () => {
+  const txs = [
+    { id: 'x1', date: '2026-05-01', asset: 'DOGE', acct: 'Neverless', type: 'buy', qty: 100, usd: 0.1 },
+    { id: 'x2', date: '2026-05-01', asset: 'BTC', acct: 'Neverless', type: 'sell', qty: 1, usd: 90000 },
+  ];
+  assert.deepEqual(parseV1Export(txs), []);
 });

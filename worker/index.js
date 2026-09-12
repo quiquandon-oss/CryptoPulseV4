@@ -12,7 +12,7 @@ import * as db from './db.js';
 import { runIngestCycle } from './ingest.js';
 import { aggregateHealth } from '../engine/health.js';
 import { computePerformance } from '../engine/performance.js';
-import { parseNeverlessCSV, parseRevolutRows, computeHoldings, computePortfolioSummary, TRACKED_ASSETS } from '../engine/portfolio.js';
+import { parseNeverlessCSV, parseRevolutRows, parseV1Export, computeHoldings, computePortfolioSummary, TRACKED_ASSETS } from '../engine/portfolio.js';
 import * as portfolio from './portfolio.js';
 
 const CORS_HEADERS = {
@@ -223,8 +223,10 @@ async function handlePortfolioImport(request, env) {
   } else if (format === 'revolut_xlsx') {
     const rate = Number(body.eurUsdRate) || 1.10; // approximation — see engine/portfolio.js
     transactions = parseRevolutRows(rows, rate);
+  } else if (format === 'v1_export') {
+    transactions = parseV1Export(rows);
   } else {
-    return json({ error: "format must be 'neverless_csv' or 'revolut_xlsx'" }, 400);
+    return json({ error: "format must be 'neverless_csv', 'revolut_xlsx', or 'v1_export'" }, 400);
   }
 
   if (!transactions.length) {

@@ -100,13 +100,36 @@ function classifyRevolutType(rawType) {
 }
 
 /**
- * Parses rows from a Revolut export — CSV or XLSX, both seen in practice. Handles two
- * distinct real-world shapes for Price/Value/Fees and Date:
- *   - raw numbers / Date objects (some XLSX exports)
- *   - currency-formatted strings with corrupted symbols, and human-readable dates
- *     with corrupted whitespace (the CSV export format actually encountered)
- * `eurUsdRate` is an explicit, injected approximation — see note above on parseNeverlessCSV's
- * design philosophy; this function never assumes a rate itself.
+ * Parses a Revolut Price field into a USD amount, detecting the actual currency
+ * rather than assuming EUR for everything. Real exports mix three cases:
+ *   - '$7.75'           -> already USD (seen on 'Buy - Revolut X' rows), no conversion
+ *   - '\u00e2\u00ac1,908.30' or a plain number -> EUR (mangled \u20ac prefix, or a raw
+ *                          number from some XLSX exports), needs eurUsdRate
+ *   - '138,920.02 IDR'  -> a currency actually seen in this export with no reliable
+ *                          conversion rate available here. Returns null rather than
+ *                          fabricating a rate, so the row gets excluded, not corrupted.
+ */
+function parseRevolutMoneyToUsd(raw, eurUsdRate) {
+  if (raw == null) return null;
+  const str = String(raw).trim();
+  if (str === '') return null;
+  if (str.startsWith('$')) {
+    const val = parseMoneyString(str);
+    return Number.isFinite(val) ? val : null;
+  }
+  if (/[A-Z]{3}$/.test(str)) {
+    return null; // e.g. IDR — no reliable conversion rate available, don't guess
+  }
+  const val = parseMoneyString(str);
+  return Number.isFinite(val) ? val * eurUsdRate : null;
+}
+
+/**
+ * Parses rows from a Revolut export — CSV or XLSX, both seen in practice. Handles
+ * currency-formatted strings with corrupted symbols (mangled \u20ac), a genuine mix of
+ * USD/EUR/other currencies within the same file (see parseRevolutMoneyToUsd), and
+ * human-readable dates with corrupted whitespace (the CSV export format encountered).
+ * `eurUsdRate` is an explicit, injected approximation for the EUR rows — never assumed.
  */
 export function parseRevolutRows(rows, eurUsdRate) {
   const tracked = new Set(TRACKED_ASSETS);
@@ -124,24 +147,64 @@ export function parseRevolutRows(rows, eurUsdRate) {
 
     // Staking rewards genuinely have no price in this export — $0 cost basis
     // reflects that honestly rather than fabricating a fair-market-value estimate.
-    const priceEur = type === 'TRANSFER_IN' ? (parseMoneyString(row['Price']) || 0) : parseMoneyString(row['Price']);
-    if (type !== 'TRANSFER_IN' && !Number.isFinite(priceEur)) return;
+    const priceUsd = type === 'TRANSFER_IN' ? (parseRevolutMoneyToUsd(row['Price'], eurUsdRate) ?? 0) : parseRevolutMoneyToUsd(row['Price'], eurUsdRate);
+    if (type !== 'TRANSFER_IN' && !Number.isFinite(priceUsd)) return;
 
     out.push({
       // Content-based, not position-based: stable across re-exports that add/reorder
       // rows, unlike an array-index suffix would be.
-      sourceId: `rev_${asset}_${ts}_${qty}_${priceEur}`,
+      sourceId: `rev_${asset}_${ts}_${qty}_${priceUsd}`,
       asset, account: 'Revolut',
       type,
       quantity: qty,
-      unitPriceUsd: priceEur * eurUsdRate,
+      unitPriceUsd: priceUsd,
       timestamp: ts,
       source: 'REVOLUT',
       priceApproximation: type === 'TRANSFER_IN'
         ? 'Staking reward — Revolut does not report a price for these, so cost basis is $0, not an estimated fair-market-value'
-        : 'EUR->USD converted using a single supplied rate, not historical FX at time of purchase',
+        : 'Non-USD amounts converted using a single supplied EUR->USD rate, not historical FX at time of purchase',
     });
   });
+
+  return out;
+}
+
+/**
+ * Parses V1's own authoritative transaction export (cryptopulse-data.json format:
+ * { txs: [{ id, date, asset, acct, type, qty, price, ccy, usd, eur, isReward? }], meta }).
+ * This is a better source than reconstructing from raw Neverless/Revolut statements
+ * where possible — V1 already resolved per-unit USD pricing (with a real, time-varying
+ * EUR->USD rate, not a single approximation) and explicitly flags reward transactions.
+ * Confirmed against a real export: all rows are type 'buy'; isReward rows have price 0
+ * (V1 doesn't report a value for these — mapped to $0 cost basis, not fabricated).
+ */
+export function parseV1Export(txs) {
+  const tracked = new Set(TRACKED_ASSETS);
+  const out = [];
+
+  for (const t of txs) {
+    if (!tracked.has(t.asset)) continue;
+    if (t.type !== 'buy') continue; // only 'buy' seen in practice; guards against future export changes
+    const ts = Date.parse(t.date);
+    const qty = Number(t.qty);
+    if (Number.isNaN(ts) || !(qty > 0)) continue;
+
+    const isReward = !!t.isReward;
+    const unitPriceUsd = isReward ? 0 : Number(t.usd);
+    if (!isReward && !Number.isFinite(unitPriceUsd)) continue;
+
+    out.push({
+      sourceId: `v1_${t.id}`,
+      asset: t.asset,
+      account: t.acct,
+      type: isReward ? 'TRANSFER_IN' : 'BUY',
+      quantity: qty,
+      unitPriceUsd,
+      timestamp: ts,
+      source: 'V1_EXPORT',
+      priceApproximation: isReward ? 'Reward — V1 does not report a price for these, cost basis is $0, not a fabricated fair-market-value' : null,
+    });
+  }
 
   return out;
 }
