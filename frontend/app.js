@@ -1,6 +1,6 @@
 // frontend/app.js
 // Shared across all V4 pages. Set the deployed Worker URL once here.
-window.V4_API_BASE = window.V4_API_BASE || 'https://cryptopulse-v4.YOUR-SUBDOMAIN.workers.dev';
+window.V4_API_BASE = window.V4_API_BASE || 'https://cryptopulse-v4.quiquandon.workers.dev';
 
 async function v4Fetch(path) {
   const res = await fetch(`${window.V4_API_BASE}${path}`);
