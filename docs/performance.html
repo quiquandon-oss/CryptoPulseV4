@@ -57,19 +57,21 @@
     </div>
 
     <!-- Chart Container -->
-    <div id="perfValueChart" class="min-h-[160px] flex items-center justify-center">
-      <p class="text-xs font-mono text-faint">Loading chart…</p>
+    <div id="perfValueChart" class="min-h-[160px]">
+      <p class="text-xs font-mono text-faint text-center py-8">Loading chart…</p>
     </div>
 
     <!-- Stats Below Chart: Best Asset, Worst Asset, Transaction Count -->
     <div class="grid grid-cols-3 gap-2 pt-3 border-t border-border text-center font-mono">
       <div class="bg-elevated p-2 rounded border border-border">
         <span class="text-[10px] text-faint uppercase block">Best Asset</span>
-        <span id="bestAssetVal" class="text-xs sm:text-sm font-semibold text-up block truncate">—</span>
+        <span id="bestAssetSym" class="text-xs sm:text-sm font-semibold text-up block">—</span>
+        <span id="bestAssetPct" class="text-[10px] text-up block"></span>
       </div>
       <div class="bg-elevated p-2 rounded border border-border">
         <span class="text-[10px] text-faint uppercase block">Worst Asset</span>
-        <span id="worstAssetVal" class="text-xs sm:text-sm font-semibold text-down block truncate">—</span>
+        <span id="worstAssetSym" class="text-xs sm:text-sm font-semibold text-down block">—</span>
+        <span id="worstAssetPct" class="text-[10px] text-down block"></span>
       </div>
       <div class="bg-elevated p-2 rounded border border-border">
         <span class="text-[10px] text-faint uppercase block">Transactions</span>
@@ -97,7 +99,7 @@
         <option value="12h">12h</option>
         <option value="24h">24h</option>
       </select>
-      <select id="fRegime" class="bg-surface border border-border rounded-lg text-xs font-mono p-2 text-ink focus:outline-none focus:border-accent">
+      <select id="fRegime" class="bg-surface border border-border rounded-lg text-xs font-mono p-2 text-ink focus:outline-none focus:border-accent col-span-2 sm:col-span-1">
         <option value="">All regimes</option>
         <option value="ALL">Aggregate (ALL)</option>
         <option value="TRENDING_BULLISH">Trending bullish</option>
@@ -154,8 +156,10 @@ async function loadPortfolioValueChart() {
 }
 
 async function loadPortfolioStats() {
-  const bestEl = document.getElementById('bestAssetVal');
-  const worstEl = document.getElementById('worstAssetVal');
+  const bestSymEl = document.getElementById('bestAssetSym');
+  const bestPctEl = document.getElementById('bestAssetPct');
+  const worstSymEl = document.getElementById('worstAssetSym');
+  const worstPctEl = document.getElementById('worstAssetPct');
   const txEl = document.getElementById('txCountVal');
 
   try {
@@ -176,15 +180,17 @@ async function loadPortfolioStats() {
       const best = sorted[0];
       const worst = sorted[sorted.length - 1];
 
-      bestEl.textContent = `${best.asset} (${fmtPct(best.pnlPct)})`;
-      worstEl.textContent = `${worst.asset} (${fmtPct(worst.pnlPct)})`;
+      bestSymEl.textContent = best.asset;
+      bestPctEl.textContent = fmtPct(best.pnlPct);
+      worstSymEl.textContent = worst.asset;
+      worstPctEl.textContent = fmtPct(worst.pnlPct);
     } else {
-      bestEl.textContent = '—';
-      worstEl.textContent = '—';
+      bestSymEl.textContent = '—'; bestPctEl.textContent = '';
+      worstSymEl.textContent = '—'; worstPctEl.textContent = '';
     }
   } catch {
-    bestEl.textContent = '—';
-    worstEl.textContent = '—';
+    bestSymEl.textContent = '—'; bestPctEl.textContent = '';
+    worstSymEl.textContent = '—'; worstPctEl.textContent = '';
     txEl.textContent = '—';
   }
 }
