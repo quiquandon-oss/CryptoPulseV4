@@ -66,7 +66,7 @@ export async function fetchEurUsdRate(fetchImpl = fetch) {
  */
 export async function fetchHistoricalEurUsdRate(dateStr, fetchImpl = fetch) {
   try {
-    const res = await fetchImpl(`https://api.frankfurter.dev/v2/${dateStr}/rate/EUR/USD`);
+    const res = await fetchImpl(`https://api.frankfurter.dev/v2/rate/EUR/USD?date=${dateStr}`);
     if (!res.ok) throw new Error(`Frankfurter HTTP ${res.status}`);
     const json = await res.json();
     if (typeof json.rate !== 'number') throw new Error('Unexpected Frankfurter response shape');
