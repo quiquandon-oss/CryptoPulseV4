@@ -13,15 +13,7 @@
 export const TRACKED_ASSETS = Object.freeze(['BTC', 'ETH', 'SOL', 'LINK', 'HYPE']);
 
 /**
- * Parses rows from a Neverless-style CSV export (the format actually seen:
- * Type, Date, Amount received, Asset received, Amount sent, Asset sent, Fee,
- * Asset of the fee, Description, USD price of asset received, USD price of
- * asset sent, USD price of fee asset, Blockchain address, Blockchain
- * transaction hash, ID). Only "Trade" rows touching a tracked asset produce
- * a transaction; deposits/withdrawals and non-tracked-asset trades (e.g.
- * USDC<->EURC) are skipped, not fabricated into something they aren't.
- *
- * @param rows array of row objects (already CSV-parsed, e.g. via PapaParse with header:true)
+ * Parses rows from a Neverless-style CSV export.
  */
 export function parseNeverlessCSV(rows) {
   const tracked = new Set(TRACKED_ASSETS);
@@ -54,15 +46,11 @@ export function parseNeverlessCSV(rows) {
         });
       }
     }
-    // Neither side is a tracked asset (e.g. USDC -> EURC) — intentionally skipped.
   }
 
   return out;
 }
 
-/** Extracts a plain number from a currency-formatted string, robust to corrupted/mangled
- * currency symbols (seen in practice: Revolut's CSV export double-encodes the € sign) and
- * thousands separators. Returns NaN rather than guessing if nothing numeric is present. */
 function parseMoneyString(raw) {
   if (raw == null) return NaN;
   if (typeof raw === 'number') return raw;
@@ -70,27 +58,12 @@ function parseMoneyString(raw) {
   return cleaned === '' || cleaned === '-' ? NaN : parseFloat(cleaned);
 }
 
-/** Parses a human-readable date string, tolerant of non-ASCII whitespace corruption
- * (seen in practice: a mangled narrow-no-break-space between time and AM/PM). */
 function parseFlexibleDate(raw) {
   if (raw instanceof Date) return raw.getTime();
   const cleaned = String(raw).replace(/[^\x20-\x7E]/g, ' ').replace(/\s+/g, ' ').trim();
   return Date.parse(cleaned);
 }
 
-/** Classifies a Revolut row's Type into what it actually means for holdings.
- * Real-world exports include variants beyond plain Buy/Sell:
- *   'Buy - Revolut X' -> BUY (a real purchase through a different order venue)
- *   'Staking reward'  -> TRANSFER_IN (a real quantity increase; Revolut leaves
- *                        Price blank for these, so cost basis is $0 rather
- *                        than a fabricated fair-market-value estimate)
- *   'Receive', 'Other' -> in practice only ever seen against fiat (EUR/USD),
- *                        which the tracked-asset filter already excludes
- *   'Stake'            -> excluded: moves an *existing* balance into staking,
- *                        not a new acquisition (confirmed against real data:
- *                        the staked quantity exactly matched the prior BUY
- *                        total for that asset — counting it too would double it)
- */
 function classifyRevolutType(rawType) {
   const t = String(rawType || '').toUpperCase();
   if (t.startsWith('BUY')) return 'BUY';
@@ -99,16 +72,6 @@ function classifyRevolutType(rawType) {
   return null;
 }
 
-/**
- * Parses a Revolut Price field into a USD amount, detecting the actual currency
- * rather than assuming EUR for everything. Real exports mix three cases:
- *   - '$7.75'           -> already USD (seen on 'Buy - Revolut X' rows), no conversion
- *   - '\u00e2\u00ac1,908.30' or a plain number -> EUR (mangled \u20ac prefix, or a raw
- *                          number from some XLSX exports), needs eurUsdRate
- *   - '138,920.02 IDR'  -> a currency actually seen in this export with no reliable
- *                          conversion rate available here. Returns null rather than
- *                          fabricating a rate, so the row gets excluded, not corrupted.
- */
 function parseRevolutMoneyToUsd(raw, eurUsdRate) {
   if (raw == null) return null;
   const str = String(raw).trim();
@@ -118,19 +81,12 @@ function parseRevolutMoneyToUsd(raw, eurUsdRate) {
     return Number.isFinite(val) ? val : null;
   }
   if (/[A-Z]{3}$/.test(str)) {
-    return null; // e.g. IDR — no reliable conversion rate available, don't guess
+    return null;
   }
   const val = parseMoneyString(str);
   return Number.isFinite(val) ? val * eurUsdRate : null;
 }
 
-/**
- * Parses rows from a Revolut export — CSV or XLSX, both seen in practice. Handles
- * currency-formatted strings with corrupted symbols (mangled \u20ac), a genuine mix of
- * USD/EUR/other currencies within the same file (see parseRevolutMoneyToUsd), and
- * human-readable dates with corrupted whitespace (the CSV export format encountered).
- * `eurUsdRate` is an explicit, injected approximation for the EUR rows — never assumed.
- */
 export function parseRevolutRows(rows, eurUsdRate) {
   const tracked = new Set(TRACKED_ASSETS);
   const out = [];
@@ -145,14 +101,10 @@ export function parseRevolutRows(rows, eurUsdRate) {
     const ts = parseFlexibleDate(row['Date']);
     if (!(qty > 0) || Number.isNaN(ts)) return;
 
-    // Staking rewards genuinely have no price in this export — $0 cost basis
-    // reflects that honestly rather than fabricating a fair-market-value estimate.
     const priceUsd = type === 'TRANSFER_IN' ? (parseRevolutMoneyToUsd(row['Price'], eurUsdRate) ?? 0) : parseRevolutMoneyToUsd(row['Price'], eurUsdRate);
     if (type !== 'TRANSFER_IN' && !Number.isFinite(priceUsd)) return;
 
     out.push({
-      // Content-based, not position-based: stable across re-exports that add/reorder
-      // rows, unlike an array-index suffix would be.
       sourceId: `rev_${asset}_${ts}_${qty}_${priceUsd}`,
       asset, account: 'Revolut',
       type,
@@ -169,22 +121,13 @@ export function parseRevolutRows(rows, eurUsdRate) {
   return out;
 }
 
-/**
- * Parses V1's own authoritative transaction export (cryptopulse-data.json format:
- * { txs: [{ id, date, asset, acct, type, qty, price, ccy, usd, eur, isReward? }], meta }).
- * This is a better source than reconstructing from raw Neverless/Revolut statements
- * where possible — V1 already resolved per-unit USD pricing (with a real, time-varying
- * EUR->USD rate, not a single approximation) and explicitly flags reward transactions.
- * Confirmed against a real export: all rows are type 'buy'; isReward rows have price 0
- * (V1 doesn't report a value for these — mapped to $0 cost basis, not fabricated).
- */
 export function parseV1Export(txs) {
   const tracked = new Set(TRACKED_ASSETS);
   const out = [];
 
   for (const t of txs) {
     if (!tracked.has(t.asset)) continue;
-    if (t.type !== 'buy') continue; // only 'buy' seen in practice; guards against future export changes
+    if (t.type !== 'buy') continue;
     const ts = Date.parse(t.date);
     const qty = Number(t.qty);
     if (Number.isNaN(ts) || !(qty > 0)) continue;
@@ -209,12 +152,6 @@ export function parseV1Export(txs) {
   return out;
 }
 
-/**
- * Weighted-average-cost position tracking. BUY/TRANSFER_IN increase quantity
- * and invested cost; SELL/TRANSFER_OUT reduce both proportionally at the
- * running average cost. Never lets quantity go negative from a sell larger
- * than the recorded position (caps at what's actually held).
- */
 export function computeHoldings(transactions) {
   const holdings = {};
   const sorted = [...transactions].sort((a, b) => a.timestamp - b.timestamp);
@@ -237,10 +174,6 @@ export function computeHoldings(transactions) {
   return holdings;
 }
 
-/**
- * @param holdings      output of computeHoldings
- * @param currentPrices { BTC: 65000, ETH: 3200, ... } — null/missing means "unavailable", never guessed
- */
 export function computePortfolioSummary(holdings, currentPrices) {
   const assets = Object.keys(holdings).filter((a) => holdings[a].quantity > 1e-12);
   let totalValue = 0;
@@ -285,7 +218,6 @@ export function computePortfolioSummary(holdings, currentPrices) {
   };
 }
 
-/** De-duplicates by sourceId — makes repeated uploads of the same file idempotent, per spec section 26. */
 export function dedupeTransactions(transactions) {
   const seen = new Set();
   const out = [];
@@ -295,4 +227,104 @@ export function dedupeTransactions(transactions) {
     out.push(tx);
   }
   return out;
+}
+
+/**
+ * Computes a normalized benchmark comparison (Base = 100) between portfolio snapshots
+ * and a benchmark asset (e.g. BTC) over their overlapping verified time range.
+ *
+ * @param {Array<Object>} portfolioPoints Array of [{ ts, total_value_usd }]
+ * @param {Array<Object>} benchmarkPoints Array of [{ ts, close }] (e.g. BTC candles)
+ * @returns {Object} Normalized benchmark series and metadata.
+ */
+export function computeNormalizedBenchmark(portfolioPoints, benchmarkPoints) {
+  const validPort = portfolioPoints.filter((p) => p.total_value_usd != null && p.total_value_usd > 0);
+  const validBtc = benchmarkPoints.filter((b) => b.close != null && b.close > 0);
+
+  if (!validPort.length || !validBtc.length) {
+    return {
+      status: 'INSUFFICIENT_DATA',
+      message: 'No overlapping verified portfolio and benchmark data available.',
+      points: [],
+    };
+  }
+
+  const basePort = validPort[0].total_value_usd;
+  const startTs = validPort[0].ts;
+
+  // Find benchmark price at or nearest to startTs
+  const btcSorted = [...validBtc].sort((a, b) => Math.abs(a.ts - startTs) - Math.abs(b.ts - startTs));
+  const baseBtc = btcSorted[0].close;
+
+  const points = validPort.map((p) => {
+    // find matching btc point near p.ts
+    const matchBtc = [...validBtc].sort((a, b) => Math.abs(a.ts - p.ts) - Math.abs(b.ts - p.ts))[0];
+    const portNorm = (p.total_value_usd / basePort) * 100;
+    const btcNorm = matchBtc ? (matchBtc.close / baseBtc) * 100 : null;
+    return {
+      ts: p.ts,
+      portfolioNormalized: Number(portNorm.toFixed(2)),
+      btcNormalized: btcNorm != null ? Number(btcNorm.toFixed(2)) : null,
+      portfolioValue: p.total_value_usd,
+      btcPrice: matchBtc?.close ?? null,
+    };
+  });
+
+  return {
+    status: 'OK',
+    baseTimestamp: startTs,
+    points,
+  };
+}
+
+/**
+ * Computes portfolio intelligence / informational insights based on holdings & allocation.
+ * Purely analytical observation — NO automated trading or financial execution.
+ *
+ * @param {Object} summary Result from computePortfolioSummary
+ * @returns {Array<Object>} Array of insight objects [{ type, level, title, description }]
+ */
+export function computePortfolioInsights(summary) {
+  const insights = [];
+  if (!summary || !summary.byAsset || !summary.byAsset.length) {
+    return insights;
+  }
+
+  // Concentration observation
+  const sorted = [...summary.byAsset].sort((a, b) => (b.allocationPct ?? 0) - (a.allocationPct ?? 0));
+  const topAsset = sorted[0];
+  if (topAsset && topAsset.allocationPct > 0.40) {
+    insights.push({
+      type: 'CONCENTRATION',
+      level: 'INFO',
+      title: `High Concentration in ${topAsset.asset}`,
+      description: `${topAsset.asset} makes up ${(topAsset.allocationPct * 100).toFixed(1)}% of total portfolio value.`,
+    });
+  }
+
+  // Diversification observation
+  if (summary.byAsset.length >= 3) {
+    insights.push({
+      type: 'DIVERSIFICATION',
+      level: 'INFO',
+      title: 'Multi-Asset Exposure',
+      description: `Portfolio holds ${summary.byAsset.length} tracked assets across Layer 1 and Infrastructure categories.`,
+    });
+  }
+
+  // Performance contribution
+  if (summary.bestPerformer && summary.worstPerformer) {
+    const best = summary.byAsset.find((a) => a.asset === summary.bestPerformer);
+    const worst = summary.byAsset.find((a) => a.asset === summary.worstPerformer);
+    if (best && worst) {
+      insights.push({
+        type: 'PERFORMANCE_CONTRIBUTION',
+        level: 'INFO',
+        title: 'Relative Performance Insight',
+        description: `Top performing position is ${best.asset} (${(best.pnlPct * 100).toFixed(1)}%), while ${worst.asset} is at ${(worst.pnlPct * 100).toFixed(1)}%.`,
+      });
+    }
+  }
+
+  return insights;
 }
