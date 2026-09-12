@@ -12,7 +12,10 @@ import * as db from './db.js';
 import { runIngestCycle } from './ingest.js';
 import { aggregateHealth } from '../engine/health.js';
 import { computePerformance } from '../engine/performance.js';
-import { parseNeverlessCSV, parseRevolutRows, parseV1Export, computeHoldings, computePortfolioSummary, TRACKED_ASSETS } from '../engine/portfolio.js';
+import {
+  parseNeverlessCSV, parseRevolutRows, parseV1Export, computeHoldings,
+  computePortfolioSummary, computeNormalizedBenchmark, computePortfolioInsights, TRACKED_ASSETS,
+} from '../engine/portfolio.js';
 import * as portfolio from './portfolio.js';
 
 const CORS_HEADERS = {
@@ -67,6 +70,12 @@ export default {
       }
       if (parts[1] === 'portfolio' && parts[2] === 'allocation') {
         return await handlePortfolioAllocation(env);
+      }
+      if (parts[1] === 'portfolio' && parts[2] === 'benchmark') {
+        return await handlePortfolioBenchmark(env, url);
+      }
+      if (parts[1] === 'portfolio' && parts[2] === 'insights') {
+        return await handlePortfolioInsightsEndpoint(env);
       }
       if (parts[1] === 'portfolio' && parts[2] === 'data-health') {
         return await handlePortfolioDataHealth(env);
@@ -146,7 +155,7 @@ async function handleAssetDetail(env, assetId) {
 
 async function handleAssetHistory(env, assetId, url) {
   const range = url.searchParams.get('range') || '24h';
-  const rangeMs = { '12h': 12, '24h': 24, '7d': 24 * 7, '30d': 24 * 30 }[range] * 3_600_000;
+  const rangeMs = { '12h': 12, '24h': 24, '7d': 24 * 7, '30d': 24 * 30, '1y': 24 * 365, 'all': 24 * 365 * 3 }[range.toLowerCase()] * 3_600_000 || (24 * 3600000);
   const since = Date.now() - rangeMs;
   const { results } = await env.DB
     .prepare(`SELECT s.ts, s.direction, s.score, s.regime, ti.price
@@ -170,8 +179,6 @@ async function handlePerformanceList(env, url) {
   const until = url.searchParams.get('until');
 
   if (since || until) {
-    // Date-range filtering isn't in the precomputed cache table, so compute it
-    // fresh from the resolved outcomes rather than approximating from the cache.
     const outcomes = await db.getResolvedOutcomesWithRegime(env.DB, { assetId, horizon });
     const sinceTs = since ? Date.parse(since) : -Infinity;
     const untilTs = until ? Date.parse(until) : Infinity;
@@ -221,8 +228,11 @@ async function handlePortfolioImport(request, env) {
   if (format === 'neverless_csv') {
     transactions = parseNeverlessCSV(rows);
   } else if (format === 'revolut_xlsx') {
-    const rate = Number(body.eurUsdRate) || 1.10; // approximation — see engine/portfolio.js
-    transactions = parseRevolutRows(rows, rate);
+    const rawRate = Number(body.eurUsdRate);
+    if (!body.eurUsdRate || !Number.isFinite(rawRate) || rawRate <= 0) {
+      return json({ error: 'Explicit valid eurUsdRate is required for Revolut EUR statement import' }, 400);
+    }
+    transactions = parseRevolutRows(rows, rawRate);
   } else if (format === 'v1_export') {
     transactions = parseV1Export(rows);
   } else {
@@ -274,6 +284,29 @@ async function handlePortfolioHistory(env, url) {
   const since = rangeMs ? Date.now() - rangeMs * 86_400_000 : 0;
   const points = await portfolio.getPortfolioHistory(env.DB, since);
   return json({ range, points });
+}
+
+async function handlePortfolioBenchmark(env, url) {
+  const benchmarkAsset = (url.searchParams.get('benchmark') || 'BTC').toUpperCase();
+  const portPoints = await portfolio.getPortfolioHistory(env.DB, 0);
+  const { results: btcCandles } = await env.DB
+    .prepare('SELECT ts, close FROM market_observations WHERE asset_id = ? ORDER BY ts ASC')
+    .bind(benchmarkAsset).all();
+
+  const benchmark = computeNormalizedBenchmark(portPoints, btcCandles);
+  return json({ benchmarkAsset, ...benchmark });
+}
+
+async function handlePortfolioInsightsEndpoint(env) {
+  const transactions = await portfolio.getAllTransactions(env.DB);
+  if (!transactions.length) {
+    return json({ insights: [] });
+  }
+  const holdings = computeHoldings(transactions);
+  const prices = await portfolio.getCurrentPrices(env);
+  const summary = computePortfolioSummary(holdings, prices);
+  const insights = computePortfolioInsights(summary);
+  return json({ insights });
 }
 
 async function handlePortfolioDataHealth(env) {

@@ -1,46 +1,54 @@
-/* docs/theme.css — shared across all V4 pages.
-   Semantic color classes (bg-base, text-ink, etc.) are plain CSS here rather
-   than Tailwind-generated utilities, specifically so they can be swapped at
-   runtime via the [data-theme] attribute without regenerating Tailwind's
-   config. Tailwind CDN is still used for layout (flex/grid/spacing/text-size). */
+/* docs/theme.css — Modern Institutional UI Design Tokens
+   Primary background: #0b1326
+   Surfaces: #131b2e, #1b253b
+   Semantic colors:
+     Bullish: #10b981
+     Bearish: #f43f5e
+     Neutral/Degraded: #f59e0b
+     Accent: #38bdf8, #2563eb
+*/
 
 :root {
-  --bg-base: #0B0D10;
-  --bg-surface: #12151A;
-  --bg-elevated: #171B21;
-  --border: #22262C;
-  --ink: #E6E8EB;
-  --muted: #8B92A0;
-  --faint: #565D68;
-  --accent: #5B8DEF;
-  --accent-soft: rgba(91, 141, 239, 0.08);
-  --accent-border: rgba(91, 141, 239, 0.3);
-  --up: #3FB97A;
-  --down: #E1604F;
-  --warn: #D9A441;
-  --scrollbar: #22262C;
+  --bg-base: #0b1326;
+  --bg-surface: #131b2e;
+  --bg-elevated: #1b253b;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.15);
+  --ink: #f8fafc;
+  --muted: #94a3b8;
+  --faint: #64748b;
+  --accent: #38bdf8;
+  --accent-blue: #2563eb;
+  --accent-soft: rgba(56, 189, 248, 0.1);
+  --accent-border: rgba(56, 189, 248, 0.3);
+  --up: #10b981;
+  --down: #f43f5e;
+  --warn: #f59e0b;
+  --scrollbar: #1b253b;
 }
 
 :root[data-theme="light"] {
-  --bg-base: #F7F8FA;
-  --bg-surface: #FFFFFF;
-  --bg-elevated: #F0F2F5;
-  --border: #DDE1E6;
-  --ink: #1A1D21;
-  --muted: #5B6572;
-  --faint: #8A93A0;
-  --accent: #3A6FD8;
-  --accent-soft: rgba(58, 111, 216, 0.06);
-  --accent-border: rgba(58, 111, 216, 0.35);
-  --up: #1F9D5C;
-  --down: #C7402F;
-  --warn: #B37B15;
-  --scrollbar: #DDE1E6;
+  --bg-base: #f8fafc;
+  --bg-surface: #ffffff;
+  --bg-elevated: #f1f5f9;
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --ink: #0f172a;
+  --muted: #475569;
+  --faint: #64748b;
+  --accent: #0284c7;
+  --accent-blue: #2563eb;
+  --accent-soft: rgba(2, 132, 199, 0.08);
+  --accent-border: rgba(2, 132, 199, 0.35);
+  --up: #059669;
+  --down: #e11d48;
+  --warn: #d97706;
+  --scrollbar: #cbd5e1;
 }
 
 html, body { background: var(--bg-base); color: var(--ink); }
-body { font-feature-settings: "tnum" 1; transition: background-color 0.15s ease, color 0.15s ease; }
-::-webkit-scrollbar { height: 8px; width: 8px; }
+body { font-feature-settings: "tnum" 1, "cv05" 1; transition: background-color 0.15s ease, color 0.15s ease; }
+::-webkit-scrollbar { height: 6px; width: 6px; }
 ::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 
@@ -48,6 +56,7 @@ body { font-feature-settings: "tnum" 1; transition: background-color 0.15s ease,
 .bg-surface { background-color: var(--bg-surface); }
 .bg-elevated { background-color: var(--bg-elevated); }
 .border-border { border-color: var(--border); }
+.border-border-strong { border-color: var(--border-strong); }
 .divide-border > * + * { border-color: var(--border); }
 .text-ink { color: var(--ink); }
 .text-muted { color: var(--muted); }
@@ -62,19 +71,39 @@ body { font-feature-settings: "tnum" 1; transition: background-color 0.15s ease,
 .bg-unavailable { background-color: var(--faint); }
 .bg-accent-soft { background-color: var(--accent-soft); }
 .border-accent-30 { border-color: var(--accent-border); }
-.bg-up-10 { background-color: color-mix(in srgb, var(--up) 10%, transparent); }
-.bg-down-10 { background-color: color-mix(in srgb, var(--down) 10%, transparent); }
+.bg-up-10 { background-color: color-mix(in srgb, var(--up) 12%, transparent); }
+.bg-down-10 { background-color: color-mix(in srgb, var(--down) 12%, transparent); }
+.bg-warn-10 { background-color: color-mix(in srgb, var(--warn) 12%, transparent); }
 .hover-bg-surface:hover { background-color: var(--bg-surface); }
 .hover-bg-elevated:hover { background-color: var(--bg-elevated); }
 .hover-text-muted:hover { color: var(--muted); }
 
+/* Monospace financial typography */
+.font-mono-num { font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+
+/* Institutional Badges & Cards */
+.badge {
+  display: inline-flex; align-items: center; gap: 0.375rem;
+  padding: 0.125rem 0.5rem; border-radius: 0.25rem;
+  font-size: 0.75rem; font-family: 'IBM Plex Mono', monospace; font-weight: 500;
+}
+.badge-up { background: color-mix(in srgb, var(--up) 15%, transparent); color: var(--up); border: 1px solid color-mix(in srgb, var(--up) 30%, transparent); }
+.badge-down { background: color-mix(in srgb, var(--down) 15%, transparent); color: var(--down); border: 1px solid color-mix(in srgb, var(--down) 30%, transparent); }
+.badge-warn { background: color-mix(in srgb, var(--warn) 15%, transparent); color: var(--warn); border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent); }
+.badge-faint { background: color-mix(in srgb, var(--faint) 15%, transparent); color: var(--faint); border: 1px solid color-mix(in srgb, var(--faint) 30%, transparent); }
+
+/* Data state containers */
+.state-container {
+  padding: 1.5rem; text-align: center; border-radius: 0.5rem; border: 1px dashed var(--border-strong);
+}
+
 /* Theme toggle button */
 .theme-toggle {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--border);
-  background: var(--bg-surface); color: var(--muted); cursor: pointer;
+  width: 32px; height: 32px; border-radius: 6px; border: 1px solid var(--border-strong);
+  background: var(--bg-surface); color: var(--muted); cursor: pointer; transition: all 0.15s ease;
 }
-.theme-toggle:hover { color: var(--ink); }
-.theme-toggle svg { width: 14px; height: 14px; }
+.theme-toggle:hover { color: var(--ink); background: var(--bg-elevated); }
+.theme-toggle svg { width: 16px; height: 16px; }
 [data-theme="light"] .icon-moon { display: none; }
 :root:not([data-theme="light"]) .icon-sun { display: none; }
