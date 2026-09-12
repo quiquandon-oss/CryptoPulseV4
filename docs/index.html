@@ -48,6 +48,16 @@
   <nav id="siteNav" class="flex items-center gap-1 mb-6 overflow-x-auto"></nav>
 
   <section class="mb-6">
+    <div class="flex items-center justify-between mb-2">
+      <h2 class="text-xs text-faint">My Assets</h2>
+      <a href="portfolio.html" class="text-xs text-accent hover-text-muted">View all &rarr;</a>
+    </div>
+    <a href="portfolio.html" id="portfolioTeaser" class="block border border-border rounded-lg p-4 hover-bg-surface transition-colors">
+      <p class="text-sm text-faint">Loading…</p>
+    </a>
+  </section>
+
+  <section class="mb-6">
     <h2 class="text-xs text-faint mb-2">Market overview</h2>
     <div id="overview" class="border border-border rounded-lg divide-y divide-border overflow-hidden">
       <div class="px-4 py-6 text-sm text-faint">Loading signals…</div>
@@ -113,6 +123,22 @@ renderNav('index.html');
     el.overview.innerHTML = `<div class="px-4 py-6 text-sm text-down">Could not reach the V4 API. ${escapeHtml(err.message)}</div>`;
     el.statusLabel.textContent = 'OFFLINE';
     el.statusDot.className = 'w-2 h-2 rounded-full bg-unavailable';
+  }
+
+  try {
+    const s = await v4Fetch('/api/portfolio');
+    const teaser = document.getElementById('portfolioTeaser');
+    if (!s.hasData) {
+      teaser.innerHTML = '<p class="text-sm text-faint">No portfolio imported yet — tap to add your Neverless/Revolut statements.</p>';
+    } else {
+      const pnlColor = s.unrealizedPnl == null ? 'text-faint' : s.unrealizedPnl >= 0 ? 'text-up' : 'text-down';
+      teaser.innerHTML = `<div class="flex items-center justify-between">
+        <span class="font-mono text-lg">${s.totalValue != null ? '$' + s.totalValue.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—'}</span>
+        <span class="font-mono text-sm ${pnlColor}">${s.unrealizedPnlPct != null ? fmtPct(s.unrealizedPnlPct) : '—'}</span>
+      </div>`;
+    }
+  } catch {
+    document.getElementById('portfolioTeaser').innerHTML = '<p class="text-sm text-faint">Portfolio unavailable.</p>';
   }
 })();
 </script>

@@ -52,6 +52,7 @@ function initThemeToggle() {
 // --- Shared nav ---------------------------------------------------------
 const NAV_PAGES = [
   { href: 'index.html', label: 'Dashboard' },
+  { href: 'portfolio.html', label: 'My Assets' },
   { href: 'performance.html', label: 'Performance' },
   { href: 'health.html', label: 'Health' },
   { href: 'audit.html', label: 'Audit' },
@@ -106,5 +107,67 @@ function renderPriceSignalChart(container, points) {
       <span>${new Date(points[0].ts).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit' })}</span>
       <span class="text-accent">— price</span>
       <span>${new Date(points[n - 1].ts).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit' })}</span>
+    </div>`;
+}
+
+// --- Portfolio: allocation donut ----------------------------------------
+function renderAllocationDonut(container, allocation) {
+  const filtered = allocation.filter((a) => a.value != null && a.value > 0);
+  if (!filtered.length) {
+    container.innerHTML = '<div class="text-sm text-faint p-4">No allocation data yet.</div>';
+    return;
+  }
+  const total = filtered.reduce((s, a) => s + a.value, 0);
+  const colors = ['var(--accent)', 'var(--up)', 'var(--warn)', 'var(--down)', 'var(--muted)'];
+  const R = 60, C = 2 * Math.PI * R, CX = 80, CY = 80;
+  let offset = 0;
+  const circles = filtered.map((a, i) => {
+    const frac = a.value / total;
+    const dash = frac * C;
+    const circle = `<circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="${colors[i % colors.length]}" stroke-width="24" stroke-dasharray="${dash.toFixed(2)} ${(C - dash).toFixed(2)}" stroke-dashoffset="${(-offset).toFixed(2)}"/>`;
+    offset += dash;
+    return circle;
+  }).join('');
+  const legend = filtered.map((a, i) => `
+    <a href="asset.html?asset=${a.asset}" class="flex items-center gap-2 text-xs hover-text-muted">
+      <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${colors[i % colors.length]}"></span>
+      <span class="font-mono">${a.asset}</span>
+      <span class="text-faint">${((a.allocationPct ?? 0) * 100).toFixed(1)}%</span>
+    </a>`).join('');
+  container.innerHTML = `
+    <div class="flex items-center gap-6 flex-wrap">
+      <svg viewBox="0 0 160 160" class="w-28 h-28 shrink-0" style="transform: rotate(-90deg)">${circles}</svg>
+      <div class="flex flex-col gap-2">${legend}</div>
+    </div>`;
+}
+
+// --- Portfolio: value-over-time chart (value line + invested-capital reference line) ---
+function renderPortfolioValueChart(container, points) {
+  const valid = points.filter((p) => p.total_value_usd != null);
+  if (valid.length < 2) {
+    container.innerHTML = '<div class="px-4 py-10 text-center text-sm text-faint">Not enough history yet — this fills in as snapshots accumulate.</div>';
+    return;
+  }
+  const W = 600, H = 180, pad = 8;
+  const allVals = valid.flatMap((p) => [p.total_value_usd, p.invested_capital_usd]).filter((v) => v != null);
+  const min = Math.min(...allVals), max = Math.max(...allVals);
+  const range = (max - min) || 1;
+  const n = valid.length;
+  const x = (i) => pad + (i / (n - 1)) * (W - pad * 2);
+  const y = (v) => H - pad - ((v - min) / range) * (H - pad * 2);
+
+  const valueLine = valid.map((p, i) => `${x(i).toFixed(1)},${y(p.total_value_usd).toFixed(1)}`).join(' ');
+  const investedPoints = valid.filter((p) => p.invested_capital_usd != null);
+  const investedLine = investedPoints.map((p) => `${x(valid.indexOf(p)).toFixed(1)},${y(p.invested_capital_usd).toFixed(1)}`).join(' ');
+
+  container.innerHTML = `
+    <svg viewBox="0 0 ${W} ${H}" class="w-full h-auto">
+      ${investedLine ? `<polyline points="${investedLine}" fill="none" stroke="var(--faint)" stroke-width="1.5" stroke-dasharray="4 3"/>` : ''}
+      <polyline points="${valueLine}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    </svg>
+    <div class="flex justify-between items-center text-[10px] text-faint mt-1 px-1">
+      <span>${new Date(valid[0].ts).toLocaleDateString()}</span>
+      <span><span class="text-accent">— </span>value &nbsp; <span class="text-faint">- - </span>invested</span>
+      <span>${new Date(valid[n - 1].ts).toLocaleDateString()}</span>
     </div>`;
 }

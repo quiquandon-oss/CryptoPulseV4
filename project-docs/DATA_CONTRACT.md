@@ -15,6 +15,16 @@ Schema source of truth: `migrations/0001_init.sql`.
 | `performance_metrics` | Precomputed win rate / return stats per asset+horizon | `refreshPerformanceMetrics` | `/api/assets/:asset/performance` |
 | `system_health` | Per-component freshness/status | `worker/ingest.js` | `/api/health` |
 | `ai_explanations` | AI layer output, kept separate from calculated evidence | `worker/ingest.js` (only if `GEMINI_API_KEY` set) | `/api/assets/:asset` |
+| `portfolio_transactions` | Imported BUY/SELL history, deduped by deterministic source id | `POST /api/portfolio/import` | holdings calculation |
+| `portfolio_snapshots` | Total portfolio value/P&L at a point in time | computed on import + each ingest cycle | `/api/portfolio/history` |
+| `portfolio_asset_snapshots` | Per-asset value/P&L at a point in time | same as above | (not yet exposed via API — data exists for a future per-asset history chart) |
+
+## Portfolio scope
+
+Fixed to 5 assets (`engine/portfolio.js` `TRACKED_ASSETS`): BTC, ETH, SOL,
+LINK, HYPE — matching what V1 already tracks. Confirmed explicitly with the
+user rather than inferred from statement contents, which include many other
+assets that are deliberately not part of the portfolio feature.
 
 ## Timestamps
 
@@ -41,10 +51,11 @@ See `engine/outcomes.js` for the exact tolerance/grace constants.
 
 ## What's intentionally NOT in this schema yet
 
-- No `regime` segmentation column populated in `performance_metrics` — the
-  table supports it (spec section 11 asks for regime-segmented performance)
-  but `refreshPerformanceMetrics` only fills asset+horizon for now. Adding
-  regime segmentation is a follow-up, not a blocker.
-- No audit/transparency API route yet (spec section 23). The raw tables are
-  already queryable by anyone with D1 access; a dedicated `/api/audit`
-  endpoint that surfaces AI prompt/response metadata is next-iteration work.
+- `portfolio_asset_snapshots` is written but not yet read by any API route —
+  it's there for a future per-asset value-history chart on the asset detail
+  page, not wasted effort, just not wired up to a UI yet.
+- No historical backfill of V4's own `portfolio_snapshots` — it only
+  accumulates from whenever a snapshot is first computed here, deliberately
+  not importing V1's `portfolio_snapshots` history to preserve isolation.
+- Portfolio benchmark comparison (vs BTC) and cumulative P/L have no
+  supporting table yet — both are computable from existing data when built.

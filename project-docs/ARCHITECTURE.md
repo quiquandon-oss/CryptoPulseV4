@@ -65,7 +65,53 @@ Don't guess — check the logs first, same as the V2 diagnosis.
 - Performance stats are withheld below `MIN_SAMPLES` (engine/performance.js) —
   shown as "Insufficient evidence — N resolved observations."
 
+## Portfolio layer (My Assets)
+
+Scope is fixed to the 5 assets V1 already tracks — BTC, ETH, SOL, LINK, HYPE
+(`engine/portfolio.js` `TRACKED_ASSETS`) — confirmed explicitly rather than
+inferred from uploaded statements, which contain a much wider set of assets
+that are intentionally not tracked here.
+
+```
+Neverless CSV / Revolut XLSX (user uploads, parsed client-side into rows)
+  -> POST /api/portfolio/import
+  -> engine/portfolio.js parseNeverlessCSV / parseRevolutRows (server-side, testable)
+  -> worker/portfolio.js insertTransactions (idempotent — id = deterministic sourceId)
+  -> engine/portfolio.js computeHoldings (weighted-average cost)
+  -> worker/portfolio.js getCurrentPrices (BTC/ETH/LINK from technical_indicators;
+     SOL/HYPE via a direct Hyperliquid fetch, since they're outside the signal
+     engine's scope — spec section 4 fixes that to BTC/ETH/LINK)
+  -> engine/portfolio.js computePortfolioSummary
+  -> D1: portfolio_transactions, portfolio_snapshots, portfolio_asset_snapshots
+  -> API: /api/portfolio, /api/portfolio/assets, /api/portfolio/history,
+          /api/portfolio/allocation, /api/portfolio/data-health
+  -> docs/portfolio.html
+```
+
+**Historical data reality check** (spec section 6 assumed "April 2025" — verified
+against actual data instead of taken on faith): the earliest real data found
+anywhere is a wider, non-portfolio account statement from August 2025. The
+tracked 5-asset portfolio's own earliest data (V1's `txs_backup`/
+`portfolio_snapshots` in `sentiment-history`, and the uploaded Revolut/
+Neverless exports) starts April 2026. V4's own `portfolio_snapshots` table
+only starts accumulating from whenever a snapshot is first computed here —
+it does not backfill V1's history, preserving isolation. A snapshot is
+computed once per `/api/portfolio/import` call and once per ingest cycle
+is a reasonable follow-up if continuous portfolio-value history matters
+more than transaction-derived holdings.
+
+**FX approximation**: Revolut statements are EUR-denominated with no USD
+column. `parseRevolutRows` converts using a single supplied rate (not
+historical FX at time of purchase) — labelled in the code and the API
+response (`priceApproximation` field), never silently treated as precise.
+
+**Not yet built** (see README "What's next"): Cumulative P/L chart, Asset
+Performance comparison chart, Portfolio vs BTC benchmark chart, a dedicated
+historical-data audit view (beyond what `/api/portfolio/data-health` already
+surfaces), and portfolio settings (base currency, benchmark selection).
+
 ## Deployment
+
 
 - **Backend**: `.github/workflows/ci-deploy.yml` runs the engine test suite on
   every push/PR, then runs `wrangler deploy` on push to `main` (needs the

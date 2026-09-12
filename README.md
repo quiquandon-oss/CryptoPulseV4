@@ -12,12 +12,14 @@ and `project-docs/DATA_CONTRACT.md` for the schema.
 ## Status
 
 Engine layer (indicators, evidence, regime, signal, outcomes, performance,
-freshness, health, AI explanation) is built and unit tested — `npm test`
-(62 tests, `node --test`, zero dependencies). Worker API, D1 schema, and the
-full 6-page frontend (dashboard, asset detail with a price+signal chart,
-performance with asset/horizon/regime/date-range filters, data health, audit,
-settings) are built and deployed. Light and dark themes are both implemented
-(toggle in the header, or in Settings). **Live**: worker at
+freshness, health, AI explanation, portfolio) is built and unit tested —
+`npm test` (77 tests, `node --test`, zero dependencies). Worker API, D1
+schema, and the full 7-page frontend (dashboard, my assets/portfolio, asset
+detail with a price+signal chart, performance with filters, data health,
+audit, settings) are built and deployed. Light and dark themes are both
+implemented. Portfolio import (Neverless CSV + Revolut XLSX, parsed
+client-side, extracted server-side) is live for the 5 assets V1 tracks
+(BTC, ETH, SOL, LINK, HYPE). **Live**: worker at
 `cryptopulse-v4.quiquandon.workers.dev`, site at
 `https://quiquandon-oss.github.io/CryptoPulseV4/`.
 
@@ -59,6 +61,10 @@ Performance stats are withheld below 20 resolved observations
 
 ## What's next
 
+- Cumulative P/L chart, Asset Performance comparison, and Portfolio vs BTC
+  benchmark charts — not built yet, computable from existing tables.
+- Portfolio settings (base currency, benchmark selection) and a dedicated
+  historical-data-audit view beyond what `/api/portfolio/data-health` shows.
 - Regime-segmented performance has real per-regime rows now, but most
   segments will show "Insufficient evidence" until more signals resolve —
   that's the data-integrity rule working as intended, not a bug.

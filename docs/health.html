@@ -31,6 +31,14 @@
   <nav id="siteNav" class="flex items-center gap-1 mb-4 overflow-x-auto"></nav>
   <h1 class="font-mono font-semibold text-lg mb-6 pb-4 border-b border-border">Data health</h1>
 
+  <section class="mb-6">
+    <h2 class="text-xs text-faint mb-2">Portfolio history</h2>
+    <div id="portfolioHealth" class="border border-border rounded-lg divide-y divide-border">
+      <div class="px-4 py-4 text-sm text-faint">Loading…</div>
+    </div>
+  </section>
+
+  <h2 class="text-xs text-faint mb-2">Market data &amp; system</h2>
   <div id="healthList" class="border border-border rounded-lg divide-y divide-border">
     <div class="px-4 py-4 text-sm text-faint">Loading…</div>
   </div>
@@ -39,6 +47,28 @@
 <script src="app.js"></script>
 <script>
 renderNav('health.html');
+(async function () {
+  try {
+    const h = await v4Fetch('/api/portfolio/data-health');
+    const el = document.getElementById('portfolioHealth');
+    if (!h.transactions?.n) {
+      el.innerHTML = '<div class="px-4 py-4 text-sm text-faint">No portfolio data imported yet.</div>';
+    } else {
+      const fmt = (ts) => new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+      el.innerHTML = `
+        <div class="px-4 py-3 flex justify-between text-sm"><span class="text-faint">Earliest data</span><span class="font-mono">${fmt(h.transactions.earliest)}</span></div>
+        <div class="px-4 py-3 flex justify-between text-sm"><span class="text-faint">Latest data</span><span class="font-mono">${fmt(h.transactions.latest)}</span></div>
+        <div class="px-4 py-3 flex justify-between text-sm"><span class="text-faint">Transactions</span><span class="font-mono">${h.transactions.n}</span></div>
+        <div class="px-4 py-3 flex justify-between text-sm"><span class="text-faint">Snapshots recorded</span><span class="font-mono">${h.snapshots.n ?? 0}</span></div>
+        ${h.bySource.map((s) => `<div class="px-4 py-3 flex justify-between text-sm"><span class="text-faint">${escapeHtml(s.source)}</span><span class="font-mono text-xs">${s.n} txs, ${fmt(s.earliest)} \u2192 ${fmt(s.latest)}</span></div>`).join('')}
+        <div class="px-4 py-3 flex justify-between text-sm"><span class="text-faint">Status</span><span class="text-up font-mono">LIVE (import-derived, not independently verified against source statements)</span></div>`;
+    }
+  } catch (err) {
+    document.getElementById('portfolioHealth').innerHTML = `<div class="px-4 py-4 text-sm text-down">${escapeHtml(err.message)}</div>`;
+  }
+})();
+</script>
+<script>
 (async function () {
   const stateColor = { LIVE: 'text-up', OK: 'text-up', RECENT: 'text-warn', STALE: 'text-warn', UNAVAILABLE: 'text-down', ERROR: 'text-down' };
   try {

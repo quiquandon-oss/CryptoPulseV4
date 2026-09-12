@@ -12,6 +12,8 @@ import * as db from './db.js';
 import { runIngestCycle } from './ingest.js';
 import { aggregateHealth } from '../engine/health.js';
 import { computePerformance } from '../engine/performance.js';
+import { parseNeverlessCSV, parseRevolutRows, computeHoldings, computePortfolioSummary, TRACKED_ASSETS } from '../engine/portfolio.js';
+import * as portfolio from './portfolio.js';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -53,6 +55,24 @@ export default {
       }
       if (parts[1] === 'performance') {
         return await handlePerformanceList(env, url);
+      }
+      if (parts[1] === 'portfolio' && parts[2] === 'import' && request.method === 'POST') {
+        return await handlePortfolioImport(request, env);
+      }
+      if (parts[1] === 'portfolio' && parts[2] === 'assets') {
+        return await handlePortfolioAssets(env);
+      }
+      if (parts[1] === 'portfolio' && parts[2] === 'history') {
+        return await handlePortfolioHistory(env, url);
+      }
+      if (parts[1] === 'portfolio' && parts[2] === 'allocation') {
+        return await handlePortfolioAllocation(env);
+      }
+      if (parts[1] === 'portfolio' && parts[2] === 'data-health') {
+        return await handlePortfolioDataHealth(env);
+      }
+      if (parts[1] === 'portfolio' && !parts[2]) {
+        return await handlePortfolioSummary(env);
       }
       if (parts[1] === 'assets' && parts[2] && parts[3] === 'history') {
         return await handleAssetHistory(env, parts[2], url);
@@ -111,7 +131,17 @@ async function handleAssetDetail(env, assetId) {
     .prepare('SELECT * FROM signal_indicators WHERE signal_id = ?').bind(signal.id).all();
   const explanation = await env.DB
     .prepare('SELECT * FROM ai_explanations WHERE signal_id = ?').bind(signal.id).first();
-  return json({ signal, indicators: indicators.results, explanation: explanation ?? null });
+
+  let position = null;
+  const transactions = await portfolio.getAllTransactions(env.DB);
+  if (transactions.some((t) => t.asset === assetId.toUpperCase())) {
+    const holdings = computeHoldings(transactions);
+    const prices = await portfolio.getCurrentPrices(env);
+    const summary = computePortfolioSummary(holdings, prices);
+    position = summary.byAsset.find((r) => r.asset === assetId.toUpperCase()) ?? null;
+  }
+
+  return json({ signal, indicators: indicators.results, explanation: explanation ?? null, position });
 }
 
 async function handleAssetHistory(env, assetId, url) {
@@ -169,4 +199,78 @@ async function handleSignalDetail(env, signalId) {
   const outcomes = await env.DB.prepare('SELECT * FROM signal_outcomes WHERE signal_id = ?').bind(signalId).all();
   const explanation = await env.DB.prepare('SELECT * FROM ai_explanations WHERE signal_id = ?').bind(signalId).first();
   return json({ signal, indicators: indicators.results, outcomes: outcomes.results, explanation: explanation ?? null });
+}
+
+// --- Portfolio ---------------------------------------------------------
+
+async function handlePortfolioImport(request, env) {
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: 'invalid JSON body' }, 400);
+  }
+  const { format, rows } = body;
+  if (!Array.isArray(rows)) return json({ error: 'rows must be an array' }, 400);
+
+  let transactions;
+  if (format === 'neverless_csv') {
+    transactions = parseNeverlessCSV(rows);
+  } else if (format === 'revolut_xlsx') {
+    const rate = Number(body.eurUsdRate) || 1.10; // approximation — see engine/portfolio.js
+    transactions = parseRevolutRows(rows, rate);
+  } else {
+    return json({ error: "format must be 'neverless_csv' or 'revolut_xlsx'" }, 400);
+  }
+
+  if (!transactions.length) {
+    return json({ ok: true, message: 'No tracked-asset transactions found in the uploaded rows.', received: rows.length, extracted: 0, inserted: 0 });
+  }
+
+  const result = await portfolio.insertTransactions(env.DB, transactions);
+  const summary = await portfolio.computeAndStoreSnapshot(env);
+  return json({ ok: true, receivedRows: rows.length, extracted: transactions.length, ...result, summary });
+}
+
+async function handlePortfolioSummary(env) {
+  const transactions = await portfolio.getAllTransactions(env.DB);
+  if (!transactions.length) {
+    return json({ hasData: false, message: 'No portfolio transactions imported yet.', trackedAssets: TRACKED_ASSETS });
+  }
+  const holdings = computeHoldings(transactions);
+  const prices = await portfolio.getCurrentPrices(env);
+  const summary = computePortfolioSummary(holdings, prices);
+  return json({ hasData: true, ...summary, trackedAssets: TRACKED_ASSETS });
+}
+
+async function handlePortfolioAssets(env) {
+  const transactions = await portfolio.getAllTransactions(env.DB);
+  const holdings = computeHoldings(transactions);
+  const prices = await portfolio.getCurrentPrices(env);
+  const summary = computePortfolioSummary(holdings, prices);
+  return json({ assets: summary.byAsset });
+}
+
+async function handlePortfolioAllocation(env) {
+  const transactions = await portfolio.getAllTransactions(env.DB);
+  const holdings = computeHoldings(transactions);
+  const prices = await portfolio.getCurrentPrices(env);
+  const summary = computePortfolioSummary(holdings, prices);
+  return json({
+    allocation: summary.byAsset.map((r) => ({ asset: r.asset, value: r.value, allocationPct: r.allocationPct })),
+    pricesComplete: summary.pricesComplete,
+  });
+}
+
+async function handlePortfolioHistory(env, url) {
+  const range = url.searchParams.get('range') || 'ALL';
+  const rangeMs = { '1W': 7, '1M': 30, '3M': 90, '6M': 180, '1Y': 365 }[range];
+  const since = rangeMs ? Date.now() - rangeMs * 86_400_000 : 0;
+  const points = await portfolio.getPortfolioHistory(env.DB, since);
+  return json({ range, points });
+}
+
+async function handlePortfolioDataHealth(env) {
+  const health = await portfolio.getDataHealth(env.DB);
+  return json(health);
 }
