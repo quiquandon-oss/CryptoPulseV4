@@ -18,8 +18,8 @@ export async function getCurrentPrices(env) {
 
   const { results } = await env.DB.prepare(
     `SELECT ti.asset_id, ti.price FROM technical_indicators ti
-     INNER JOIN (SELECT asset_id, MAX(ts) AS max_ts FROM technical_indicators GROUP BY asset_id) latest
-       ON ti.asset_id = latest.asset_id AND ti.ts = latest.max_ts`,
+     INNER JOIN (SELECT asset_id AS a2, MAX(ts) AS max_ts FROM technical_indicators GROUP BY asset_id) latest
+       ON ti.asset_id = latest.a2 AND ti.ts = latest.max_ts`,
   ).all();
   for (const row of results) prices[row.asset_id] = row.price;
 
