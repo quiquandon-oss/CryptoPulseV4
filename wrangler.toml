@@ -1,6 +1,7 @@
 name = "cryptopulse-v4"
 main = "worker/index.js"
 compatibility_date = "2026-09-01"
+account_id = "f58e761fbc8e62dc404d8684290af264"
 
 # Deliberately no [triggers] block: this Cloudflare account's 5 Free-tier Cron
 # Trigger slots are already used by V1 (3) and V2 (2). Ingestion is instead
