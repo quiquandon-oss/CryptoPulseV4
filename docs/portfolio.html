@@ -123,13 +123,25 @@ async function handleRevolutFile(file) {
 }
 
 async function submitImport(format, rows) {
+  let token = localStorage.getItem('v4-import-token');
+  if (!token) {
+    token = prompt('Enter the portfolio import token (same as the Worker\'s INGEST_TOKEN — set once in Settings after this).');
+    if (!token) { document.getElementById('uploadStatus').textContent = 'Import cancelled — a token is required.'; return; }
+    localStorage.setItem('v4-import-token', token);
+  }
+
   document.getElementById('uploadStatus').textContent = `Uploading ${rows.length} rows…`;
   try {
     const res = await fetch(`${window.V4_API_BASE}/api/portfolio/import`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({ format, rows, eurUsdRate: EUR_USD_RATE }),
     });
     const data = await res.json();
+    if (res.status === 401) {
+      localStorage.removeItem('v4-import-token');
+      document.getElementById('uploadStatus').textContent = 'Import token was rejected — cleared it, please try again with the correct value.';
+      return;
+    }
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     document.getElementById('uploadStatus').textContent =
       `Done — ${data.extracted} tracked-asset transactions found, ${data.inserted} new (${data.receivedRows - data.extracted} rows ignored: other assets, deposits, etc).`;

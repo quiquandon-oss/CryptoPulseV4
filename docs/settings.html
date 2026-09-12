@@ -43,6 +43,18 @@
   </section>
 
   <section class="mb-6">
+    <h2 class="text-xs text-faint mb-2">Portfolio import authorization</h2>
+    <div class="border border-border rounded-lg px-4 py-3">
+      <label class="text-sm block mb-1.5">Import token</label>
+      <div class="flex gap-2">
+        <input id="importTokenInput" type="password" class="flex-1 bg-surface border border-border rounded-md text-sm px-2 py-1.5 text-ink font-mono" placeholder="Same value as the Worker's INGEST_TOKEN">
+        <button id="importTokenSave" class="text-xs px-3 py-1.5 rounded-md bg-accent-soft text-accent border border-accent-30">Save</button>
+      </div>
+      <p class="text-xs text-faint mt-2">Required to import statements on the My Assets page — it's the same value you set with <code>wrangler secret put INGEST_TOKEN</code>. Stored only in this browser, never committed to the repo (the site is public and static, so it can't hold a secret itself).</p>
+    </div>
+  </section>
+
+  <section class="mb-6">
     <h2 class="text-xs text-faint mb-2">API connection</h2>
     <div class="border border-border rounded-lg px-4 py-3">
       <label class="text-sm block mb-1.5">Worker API base URL</label>
@@ -96,6 +108,12 @@ document.getElementById('apiBaseSave').addEventListener('click', () => {
 document.getElementById('apiBaseReset').addEventListener('click', () => {
   localStorage.removeItem('v4-api-base-override');
   location.reload();
+});
+
+document.getElementById('importTokenInput').value = localStorage.getItem('v4-import-token') || '';
+document.getElementById('importTokenSave').addEventListener('click', () => {
+  const val = document.getElementById('importTokenInput').value.trim();
+  if (val) { localStorage.setItem('v4-import-token', val); document.getElementById('importTokenInput').value = ''; document.getElementById('importTokenInput').placeholder = 'Saved ✓ (hidden)'; }
 });
 </script>
 </body>

@@ -204,6 +204,10 @@ async function handleSignalDetail(env, signalId) {
 // --- Portfolio ---------------------------------------------------------
 
 async function handlePortfolioImport(request, env) {
+  const auth = request.headers.get('Authorization');
+  if (!env.INGEST_TOKEN || auth !== `Bearer ${env.INGEST_TOKEN}`) {
+    return json({ error: 'unauthorized' }, 401);
+  }
   let body;
   try {
     body = await request.json();
