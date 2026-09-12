@@ -43,7 +43,10 @@
         <p class="text-[11px] font-mono text-faint">Equity curve & capital allocation</p>
       </div>
       <!-- Period Selector -->
-      <div id="perfPeriodSelector" class="flex gap-1 overflow-x-auto no-scrollbar py-0.5"></div>
+      <div class="flex items-center gap-2">
+        <div id="perfPeriodSelector" class="flex gap-1 overflow-x-auto no-scrollbar py-0.5"></div>
+        <div id="perfValueChartExpand"></div>
+      </div>
     </div>
 
     <!-- Chart Container -->
@@ -137,6 +140,7 @@ async function loadPortfolioValueChart() {
   try {
     const { points } = await v4Fetch(`/api/portfolio/history?range=${activeRange}`);
     renderPortfolioValueChart(chartEl, points);
+    addFullscreenButton('perfValueChartExpand', 'Portfolio Value Chart', renderPortfolioValueChart, points);
   } catch (err) {
     renderDataState(chartEl, 'ERROR', err.message);
   }

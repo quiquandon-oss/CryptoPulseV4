@@ -395,3 +395,55 @@ function renderPriceSignalChart(container, points) {
       <span>${new Date(points[n - 1].ts).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit' })}</span>
     </div>`;
 }
+
+// --- Shared: fullscreen chart modal --------------------------------------
+// Re-invokes the SAME render function against a larger container rather than
+// maintaining a separate "big" chart implementation — every render*Chart
+// function above already produces responsive, full-width SVG, so this is
+// just "the same chart, more room."
+function ensureFullscreenModal() {
+  let modal = document.getElementById('chartFullscreenModal');
+  if (modal) return modal;
+  modal = document.createElement('div');
+  modal.id = 'chartFullscreenModal';
+  modal.className = 'fixed inset-0 z-50 hidden items-center justify-center p-3 sm:p-6';
+  modal.style.background = 'rgba(0,0,0,0.6)';
+  modal.innerHTML = `
+    <div class="bg-surface border border-border rounded-xl p-4 sm:p-6 w-full max-w-3xl max-h-[90vh] overflow-auto relative">
+      <button id="chartFullscreenClose" class="absolute top-3 right-3 text-faint hover-text-ink text-lg leading-none w-7 h-7 flex items-center justify-center rounded hover-bg-elevated" aria-label="Close">&#10005;</button>
+      <h3 id="chartFullscreenTitle" class="text-xs font-mono font-semibold text-faint uppercase tracking-wider mb-4 pr-8"></h3>
+      <div id="chartFullscreenBody"></div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', (e) => { if (e.target === modal) closeChartFullscreen(); });
+  modal.querySelector('#chartFullscreenClose').addEventListener('click', closeChartFullscreen);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeChartFullscreen(); });
+  return modal;
+}
+
+function closeChartFullscreen() {
+  const modal = document.getElementById('chartFullscreenModal');
+  if (modal) { modal.classList.add('hidden'); modal.classList.remove('flex'); }
+}
+
+function openChartFullscreen(title, renderFn, ...args) {
+  const modal = ensureFullscreenModal();
+  modal.querySelector('#chartFullscreenTitle').textContent = title;
+  const body = modal.querySelector('#chartFullscreenBody');
+  body.innerHTML = '';
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+  renderFn(body, ...args);
+}
+
+const EXPAND_ICON_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>';
+
+/** Renders an expand button into `buttonContainerId` that opens the same
+ * chart, at the same data, in the fullscreen modal. Call this right after
+ * the chart's normal (non-fullscreen) render, with the same args. */
+function addFullscreenButton(buttonContainerId, title, renderFn, ...args) {
+  const el = document.getElementById(buttonContainerId);
+  if (!el) return;
+  el.innerHTML = `<button class="text-faint hover-text-ink p-1.5 rounded hover-bg-elevated" aria-label="Expand chart" title="Expand">${EXPAND_ICON_SVG}</button>`;
+  el.querySelector('button').addEventListener('click', () => openChartFullscreen(title, renderFn, ...args));
+}
