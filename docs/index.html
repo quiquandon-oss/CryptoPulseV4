@@ -50,7 +50,7 @@
   <nav id="siteNav" class="mb-4"></nav>
 
   <!-- PORTFOLIO HERO -->
-  <section class="mb-5">
+  <section class="mb-3">
     <a href="portfolio.html" id="portfolioHero" class="block bg-surface border border-border rounded-xl p-4 sm:p-5 hover:border-accent-30 transition-all shadow-sm">
       <div class="flex items-center justify-between mb-2">
         <span class="text-[11px] font-mono uppercase tracking-wider text-faint">Total Portfolio Value</span>
@@ -60,6 +60,17 @@
         <p class="text-sm font-mono text-faint">Loading live portfolio…</p>
       </div>
     </a>
+  </section>
+
+  <!-- Equity curve — kept as a separate (non-link) section so its range
+       buttons, fullscreen expand, and touch-drag tooltip don't fight the
+       hero card's own link for taps. -->
+  <section id="heroChartSection" class="mb-5 bg-surface border border-border rounded-xl p-4 sm:p-5 hidden">
+    <div class="flex items-center justify-between gap-2 mb-2">
+      <div id="heroRangeButtons" class="flex gap-1 overflow-x-auto no-scrollbar"></div>
+      <div id="heroChartExpand"></div>
+    </div>
+    <div id="heroChart" class="min-h-[100px]"></div>
   </section>
 
   <!-- SYSTEM STATUS BANNER -->
@@ -98,6 +109,31 @@
 <script src="app.js"></script>
 <script>
 renderNav('index.html');
+
+const heroRanges = ['1W', '1M', '3M', '6M', '1Y', 'ALL'];
+let heroActiveRange = 'ALL'; // defaults to ALL, not 24H like V1 — that's where the real multi-month history actually shows; a 24H default would look near-empty until snapshots log more densely.
+let heroChartInitialized = false;
+function renderHeroRangeButtons() {
+  const el = document.getElementById('heroRangeButtons');
+  el.innerHTML = heroRanges.map((r) => `<button data-range="${r}" class="text-[10px] font-mono px-2 py-0.5 rounded border ${r === heroActiveRange ? 'border-accent-30 bg-accent-soft text-accent' : 'border-border text-faint hover-bg-elevated'}">${r}</button>`).join('');
+  el.querySelectorAll('button').forEach((btn) => btn.addEventListener('click', () => { heroActiveRange = btn.dataset.range; renderHeroRangeButtons(); loadHeroChart(); }));
+}
+async function loadHeroChart() {
+  const chartEl = document.getElementById('heroChart');
+  try {
+    const { points } = await v4Fetch(`/api/portfolio/history?range=${heroActiveRange}`);
+    renderPortfolioValueChart(chartEl, points);
+    addFullscreenButton('heroChartExpand', 'Total Portfolio Value', renderPortfolioValueChart, points);
+  } catch (err) {
+    renderDataState(chartEl, 'ERROR', err.message);
+  }
+}
+function initHeroChart() {
+  if (heroChartInitialized) return;
+  heroChartInitialized = true;
+  renderHeroRangeButtons();
+  loadHeroChart();
+}
 
 (async function () {
   const el = {
@@ -161,6 +197,9 @@ renderNav('index.html');
           <span class="text-faint">Invested Capital:</span>
           <span class="font-medium text-ink">${fmtUsd(s.investedCapital)}</span>
         </div>`;
+
+      document.getElementById('heroChartSection').classList.remove('hidden');
+      initHeroChart();
     }
   } catch {
     el.heroContent.innerHTML = '<p class="text-sm font-mono text-faint">Portfolio details unavailable.</p>';

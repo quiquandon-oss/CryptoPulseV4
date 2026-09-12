@@ -232,8 +232,8 @@ renderNav('asset.html');
     chartEl.innerHTML = '<div class="px-4 py-8 text-center text-xs font-mono text-faint">Loading chart…</div>';
     try {
       const { points } = await v4Fetch(`/api/assets/${asset}/history?range=${activeRange}`);
-      renderPriceSignalChart(chartEl, points);
-      addFullscreenButton('chartExpand', `${asset} — Signal Timeline & Price Chart`, renderPriceSignalChart, points);
+      renderPriceSignalChart(chartEl, points, activeRange);
+      addFullscreenButton('chartExpand', `${asset} — Signal Timeline & Price Chart`, renderPriceSignalChart, points, activeRange);
     } catch (err) {
       renderDataState(chartEl, 'ERROR', err.message);
     }

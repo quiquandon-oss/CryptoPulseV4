@@ -178,21 +178,109 @@ function renderNav(activeHref) {
 document.addEventListener('DOMContentLoaded', initThemeToggle);
 
 // --- Visualization 1: Portfolio Value Equity Curve ----------------------
+// --- Shared: touch/hover value inspection on line charts -----------------
+// Every render*Chart function below builds a fixed-viewBox SVG; this wires a
+// crosshair + tooltip onto it that works identically for mouse hover and
+// touch, converting the pointer's real screen position into viewBox
+// coordinates (since the SVG renders at whatever width its container is,
+// not its viewBox width).
+function wireChartTooltip(container, viewBoxW, viewBoxH, xPositions, formatFn) {
+  const svg = container.querySelector('svg');
+  if (!svg || !xPositions.length) return;
+  const ns = 'http://www.w3.org/2000/svg';
+
+  const guide = document.createElementNS(ns, 'line');
+  guide.setAttribute('y1', '0');
+  guide.setAttribute('y2', String(viewBoxH));
+  guide.setAttribute('stroke', 'var(--faint)');
+  guide.setAttribute('stroke-width', '1');
+  guide.style.display = 'none';
+  svg.appendChild(guide);
+
+  const dot = document.createElementNS(ns, 'circle');
+  dot.setAttribute('r', '3.5');
+  dot.setAttribute('fill', 'var(--accent)');
+  dot.setAttribute('stroke', 'var(--surface)');
+  dot.setAttribute('stroke-width', '1.5');
+  dot.style.display = 'none';
+  svg.appendChild(dot);
+
+  if (getComputedStyle(container).position === 'static') container.style.position = 'relative';
+  let tooltip = container.querySelector(':scope > .chart-tooltip');
+  if (!tooltip) {
+    tooltip = document.createElement('div');
+    tooltip.className = 'chart-tooltip absolute pointer-events-none z-10 bg-elevated border border-border rounded-md px-2 py-1 text-[10px] font-mono text-ink shadow-sm';
+    tooltip.style.display = 'none';
+    container.appendChild(tooltip);
+  }
+
+  function nearestIndex(viewBoxX) {
+    let nearest = 0, bestDiff = Infinity;
+    for (let i = 0; i < xPositions.length; i++) {
+      const d = Math.abs(xPositions[i] - viewBoxX);
+      if (d < bestDiff) { bestDiff = d; nearest = i; }
+    }
+    return nearest;
+  }
+
+  function show(clientX) {
+    const rect = svg.getBoundingClientRect();
+    const relX = clientX - rect.left;
+    if (relX < -5 || relX > rect.width + 5 || !rect.width) { hide(); return; }
+    const i = nearestIndex((relX / rect.width) * viewBoxW);
+    const info = formatFn(i);
+    if (!info) { hide(); return; }
+
+    const vx = xPositions[i];
+    guide.setAttribute('x1', String(vx));
+    guide.setAttribute('x2', String(vx));
+    guide.style.display = '';
+    if (info.y != null) {
+      dot.setAttribute('cx', String(vx));
+      dot.setAttribute('cy', String(info.y));
+      dot.style.display = '';
+    } else {
+      dot.style.display = 'none';
+    }
+
+    tooltip.innerHTML = `<div class="font-semibold text-ink">${info.value}</div><div class="text-faint">${info.label}</div>`;
+    tooltip.style.display = 'block';
+    const pxPerViewBoxUnit = rect.width / viewBoxW;
+    const tooltipWidth = tooltip.offsetWidth || 90;
+    let leftPx = vx * pxPerViewBoxUnit - tooltipWidth / 2;
+    leftPx = Math.min(Math.max(leftPx, 2), rect.width - tooltipWidth - 2);
+    tooltip.style.left = `${leftPx}px`;
+    tooltip.style.top = '2px';
+  }
+  function hide() {
+    guide.style.display = 'none';
+    dot.style.display = 'none';
+    tooltip.style.display = 'none';
+  }
+
+  svg.style.touchAction = 'pan-y';
+  svg.addEventListener('mousemove', (e) => show(e.clientX));
+  svg.addEventListener('mouseleave', hide);
+  svg.addEventListener('touchstart', (e) => show(e.touches[0].clientX), { passive: true });
+  svg.addEventListener('touchmove', (e) => show(e.touches[0].clientX), { passive: true });
+  svg.addEventListener('touchend', hide);
+}
+
 function renderPortfolioValueChart(container, points) {
   const valid = (points || []).filter((p) => p.total_value_usd != null);
   if (valid.length < 2) {
     renderDataState(container, 'INSUFFICIENT_DATA', 'No verified portfolio snapshots prior to April 2026.');
     return;
   }
-  const W = 600, H = 180, pad = 12;
+  const W = 600, H = 220, pad = 12;
   // Scale to total_value_usd's OWN range, not combined with invested_capital_usd.
   // Invested capital is often far from current value (e.g. a portfolio down
   // 20%) — sharing one axis compresses the more interesting value line down
   // to a sliver near one edge, regardless of how many points there are.
-  // The invested line still plots on this same scale and simply clips at the
-  // SVG edge when it falls outside the value line's range — a flat reference
-  // line running off-screen is more legible than crushing the value line to
-  // show it in full.
+  // The invested line still plots on this same scale; a <clipPath> keeps it
+  // cleanly invisible outside the plot area instead of relying on the SVG's
+  // own edge clipping, which drew a confusing partial line when a run of
+  // points sat right at the boundary.
   const vals = valid.map((p) => p.total_value_usd);
   const rawMin = Math.min(...vals), rawMax = Math.max(...vals);
   const breathing = (rawMax - rawMin) * 0.12 || Math.abs(rawMax) * 0.02 || 1;
@@ -207,10 +295,12 @@ function renderPortfolioValueChart(container, points) {
   const investedLine = investedPoints.map((p) => `${x(valid.indexOf(p)).toFixed(1)},${y(p.invested_capital_usd).toFixed(1)}`).join(' ');
   const lastInvested = investedPoints[investedPoints.length - 1]?.invested_capital_usd;
   const investedOffScale = lastInvested != null && (lastInvested < min || lastInvested > max);
+  const clipId = `plotclip-${Math.random().toString(36).slice(2, 9)}`;
 
   container.innerHTML = `
     <svg viewBox="0 0 ${W} ${H}" class="w-full h-auto">
-      ${investedLine ? `<polyline points="${investedLine}" fill="none" stroke="var(--faint)" stroke-width="1.5" stroke-dasharray="4 3"/>` : ''}
+      <defs><clipPath id="${clipId}"><rect x="${pad}" y="${pad}" width="${W - pad * 2}" height="${H - pad * 2}"/></clipPath></defs>
+      ${investedLine ? `<polyline points="${investedLine}" fill="none" stroke="var(--faint)" stroke-width="1.5" stroke-dasharray="4 3" clip-path="url(#${clipId})"/>` : ''}
       <polyline points="${valueLine}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
     </svg>
     <div class="flex justify-between items-center text-[10px] font-mono text-faint mt-1 px-1">
@@ -218,6 +308,12 @@ function renderPortfolioValueChart(container, points) {
       <span><span class="text-accent">— </span>value &nbsp; <span class="text-faint">- - </span>invested${investedOffScale ? ` (${fmtUsd(lastInvested)}, off-scale)` : ''}</span>
       <span>${new Date(valid[n - 1].ts).toLocaleDateString()}</span>
     </div>`;
+
+  wireChartTooltip(container, W, H, valid.map((_, i) => x(i)), (i) => ({
+    value: fmtUsd(valid[i].total_value_usd),
+    label: new Date(valid[i].ts).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: n < 40 ? '2-digit' : undefined, minute: n < 40 ? '2-digit' : undefined }),
+    y: y(valid[i].total_value_usd),
+  }));
 }
 
 // --- Visualization 2: Cumulative P/L History ---------------------------
@@ -227,7 +323,7 @@ function renderCumulativePnlChart(container, points) {
     renderDataState(container, 'INSUFFICIENT_DATA', 'Insufficient snapshot history to plot cumulative P/L.');
     return;
   }
-  const W = 600, H = 160, pad = 12;
+  const W = 600, H = 200, pad = 12;
   // Scale to the P/L series' own range — do NOT force 0 into it. A portfolio
   // sitting consistently around -$700 gets squashed near one edge if the
   // range is forced to span all the way up to 0; the day-to-day P/L movement
@@ -257,6 +353,12 @@ function renderCumulativePnlChart(container, points) {
       <span class="${lastPnl >= 0 ? 'text-up' : 'text-down'} font-medium">Net P/L: ${fmtUsd(lastPnl)}</span>
       <span>${new Date(valid[n - 1].ts).toLocaleDateString()}</span>
     </div>`;
+
+  wireChartTooltip(container, W, H, valid.map((_, i) => x(i)), (i) => ({
+    value: `${valid[i].unrealized_pnl_usd >= 0 ? '+' : ''}${fmtUsd(valid[i].unrealized_pnl_usd)}`,
+    label: new Date(valid[i].ts).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: n < 40 ? '2-digit' : undefined, minute: n < 40 ? '2-digit' : undefined }),
+    y: y(valid[i].unrealized_pnl_usd),
+  }));
 }
 
 // --- Visualization 3: Portfolio Allocation Donut -----------------------
@@ -346,6 +448,12 @@ function renderBenchmarkChart(container, benchmarkData) {
       <span><span class="text-accent">— </span>Portfolio &nbsp; <span class="text-warn">- - </span>BTC Benchmark</span>
       <span>${new Date(points[n - 1].ts).toLocaleDateString()}</span>
     </div>`;
+
+  wireChartTooltip(container, W, H, points.map((_, i) => x(i)), (i) => ({
+    value: `Portfolio ${points[i].portfolioNormalized.toFixed(1)}${points[i].btcNormalized != null ? ` &middot; BTC ${points[i].btcNormalized.toFixed(1)}` : ''}`,
+    label: new Date(points[i].ts).toLocaleDateString(),
+    y: y(points[i].portfolioNormalized),
+  }));
 }
 
 // --- Visualization 6: Asset Position Value History -----------------------
@@ -358,12 +466,17 @@ function renderAssetPositionChart(container, positionHistory) {
 }
 
 // --- Visualization 7: Price + Signal Timeline Chart --------------------
-function renderPriceSignalChart(container, points) {
+// `requestedRange` (optional) lets this flag when the selected timeframe
+// button (e.g. "30d") shows the exact same points as a shorter one would —
+// not a bug, just genuinely less signal history than that button implies
+// yet, and worth saying so instead of silently looking identical.
+function renderPriceSignalChart(container, points, requestedRange = null) {
   if (!points || points.length < 2) {
     renderDataState(container, 'INSUFFICIENT_DATA', 'Not enough historical signal observations for chart.');
     return;
   }
-  const W = 600, H = 220, priceH = 150, scoreTop = 165, scoreH = 45, pad = 8;
+  const RANGE_MS = { '12h': 12, '24h': 24, '7d': 24 * 7, '30d': 24 * 30 };
+  const W = 600, H = 240, priceH = 150, scoreTop = 165, scoreH = 45, pad = 8;
   const prices = points.map((p) => p.price).filter((p) => p != null);
   const minP = Math.min(...prices), maxP = Math.max(...prices);
   const rangeP = (maxP - minP) || 1;
@@ -383,7 +496,14 @@ function renderPriceSignalChart(container, points) {
     return `<rect x="${(x(i) - barW / 2).toFixed(1)}" y="${yTop.toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(1, h).toFixed(1)}" fill="${color}" />`;
   }).join('');
 
+  const actualSpanMs = points[n - 1].ts - points[0].ts;
+  const requestedMs = requestedRange ? RANGE_MS[requestedRange.toLowerCase()] * 3_600_000 : null;
+  const sparseNote = requestedMs && actualSpanMs < requestedMs * 0.9
+    ? `<p class="text-[10px] text-faint mt-1.5 px-1">Only ${Math.max(1, Math.round(actualSpanMs / 3_600_000))}h of signal history exists yet — shorter than the selected ${requestedRange} range, so every range showing the same points here isn't a bug, it'll fill in as more hourly cycles run.</p>`
+    : '';
+
   container.innerHTML = `
+    <p class="text-[10px] text-faint mb-1 px-1">Top: hourly price. Bottom: signal strength each cycle (green=bullish, red=bearish, gray=neutral) &mdash; taller bar means stronger conviction, not bigger price move.</p>
     <svg viewBox="0 0 ${W} ${H}" class="w-full h-auto">
       <polyline points="${pricePoints}" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" />
       <line x1="${pad}" y1="${scoreMid}" x2="${W - pad}" y2="${scoreMid}" stroke="var(--border)" stroke-width="1" />
@@ -393,7 +513,18 @@ function renderPriceSignalChart(container, points) {
       <span>${new Date(points[0].ts).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit' })}</span>
       <span class="text-accent">— price</span>
       <span>${new Date(points[n - 1].ts).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit' })}</span>
-    </div>`;
+    </div>
+    ${sparseNote}`;
+
+  wireChartTooltip(container, W, H, points.map((_, i) => x(i)), (i) => {
+    const p = points[i];
+    if (p.price == null) return null;
+    return {
+      value: `${fmtUsd(p.price)}${p.direction ? ` &middot; ${p.direction} (${p.score >= 0 ? '+' : ''}${p.score})` : ''}`,
+      label: new Date(p.ts).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
+      y: yPrice(p.price),
+    };
+  });
 }
 
 // --- Shared: fullscreen chart modal --------------------------------------

@@ -268,23 +268,30 @@ async function loadSummary() {
   }
 }
 
+const INSIGHT_LABELS = {
+  CONCENTRATION: { label: 'Concentration', icon: '&#9888;', badgeClass: 'badge-warn' },
+  DIVERSIFICATION: { label: 'Diversification', icon: '&#9737;', badgeClass: 'badge-up' },
+  PERFORMANCE_CONTRIBUTION: { label: 'Performance', icon: '&#8593;', badgeClass: 'bg-accent-soft text-accent' },
+};
+
 async function loadInsights() {
   const el = document.getElementById('insightsSection');
   try {
     const { insights } = await v4Fetch('/api/portfolio/insights');
     if (!insights || !insights.length) { el.innerHTML = ''; return; }
     el.innerHTML = `
-      <div class="bg-surface border border-border rounded-xl p-4 shadow-sm font-mono space-y-2">
-        <h2 class="text-xs font-semibold text-faint uppercase tracking-wider">Portfolio Insights</h2>
+      <div class="bg-surface border border-border rounded-xl p-4 shadow-sm space-y-3">
+        <h2 class="text-xs font-mono font-semibold text-faint uppercase tracking-wider">Portfolio Insights</h2>
         <div class="space-y-2">
-          ${insights.map((i) => `
-            <div class="flex items-start gap-2 text-xs bg-elevated p-2.5 rounded-lg border border-border">
-              <span class="text-accent font-semibold shrink-0">[${i.type}]</span>
-              <div>
-                <span class="font-medium text-ink">${i.title}:</span>
-                <span class="text-muted">${i.description}</span>
-              </div>
-            </div>`).join('')}
+          ${insights.map((i) => {
+            const meta = INSIGHT_LABELS[i.type] || { label: i.type.replace(/_/g, ' '), icon: '&#8226;', badgeClass: 'badge-warn' };
+            return `
+            <div class="bg-elevated p-3 rounded-lg border border-border">
+              <span class="inline-flex items-center gap-1 text-[10px] font-mono font-semibold uppercase tracking-wide px-2 py-0.5 rounded ${meta.badgeClass} mb-1.5">${meta.icon} ${meta.label}</span>
+              <p class="text-sm font-medium text-ink leading-snug">${i.title}</p>
+              <p class="text-xs text-faint leading-snug mt-0.5">${i.description}</p>
+            </div>`;
+          }).join('')}
         </div>
       </div>`;
   } catch {
