@@ -3,8 +3,8 @@
 // I/O layer for the portfolio feature. Pure calculation lives in
 // engine/portfolio.js; this file only touches D1 and the market data source.
 
-import { TRACKED_ASSETS, computeHoldings, computePortfolioSummary, dedupeTransactions } from '../engine/portfolio.js';
-import { fetchCandles } from './data-source.js';
+import { TRACKED_ASSETS, computeHoldings, computePortfolioSummary, dedupeTransactions, computeAccruedInterestEur } from '../engine/portfolio.js';
+import { fetchCandles, fetchEurUsdRate } from './data-source.js';
 
 export async function getCurrentPrices(env) {
   const prices = {};
@@ -20,6 +20,26 @@ export async function getCurrentPrices(env) {
 
   for (const asset of TRACKED_ASSETS) if (!(asset in prices)) prices[asset] = null;
   return prices;
+}
+
+/** Ported cash-interest figure (see engine/portfolio.js) converted to USD at a live rate. */
+export async function getCashInterest(now = Date.now()) {
+  const dateStr = new Date(now).toISOString().slice(0, 10);
+  const eur = computeAccruedInterestEur(dateStr);
+  const fx = await fetchEurUsdRate();
+  return { eur, usd: eur * fx, fx };
+}
+
+/**
+ * The single place that assembles a portfolio summary: transactions -> holdings
+ * -> live prices -> live cash interest -> summary. Used by every route that
+ * needs "the current portfolio" instead of each repeating the same 4 calls.
+ */
+export async function buildPortfolioSummary(env, now = Date.now()) {
+  const transactions = await getAllTransactions(env.DB);
+  const holdings = computeHoldings(transactions);
+  const [prices, cashInterest] = await Promise.all([getCurrentPrices(env), getCashInterest(now)]);
+  return computePortfolioSummary(holdings, prices, cashInterest);
 }
 
 export async function insertTransactions(db, transactions) {
@@ -49,15 +69,15 @@ export async function getAllTransactions(db) {
 }
 
 export async function computeAndStoreSnapshot(env, now = Date.now()) {
-  const transactions = await getAllTransactions(env.DB);
-  const holdings = computeHoldings(transactions);
-  const prices = await getCurrentPrices(env);
-  const summary = computePortfolioSummary(holdings, prices);
+  const summary = await buildPortfolioSummary(env, now);
 
   await env.DB.prepare(
-    `INSERT OR REPLACE INTO portfolio_snapshots (id, ts, total_value_usd, invested_capital_usd, unrealized_pnl_usd, unrealized_pnl_pct, prices_complete)
-     VALUES (?,?,?,?,?,?,?)`,
-  ).bind(String(now), now, summary.totalValue, summary.investedCapital, summary.unrealizedPnl, summary.unrealizedPnlPct, summary.pricesComplete ? 1 : 0).run();
+    `INSERT OR REPLACE INTO portfolio_snapshots (id, ts, total_value_usd, invested_capital_usd, unrealized_pnl_usd, unrealized_pnl_pct, prices_complete, cash_interest_usd, cash_interest_eur, eur_usd_fx)
+     VALUES (?,?,?,?,?,?,?,?,?,?)`,
+  ).bind(
+    String(now), now, summary.totalValue, summary.investedCapital, summary.unrealizedPnl, summary.unrealizedPnlPct,
+    summary.pricesComplete ? 1 : 0, summary.cashInterestUsd, summary.cashInterestEur, summary.eurUsdFx,
+  ).run();
 
   if (summary.byAsset.length) {
     const stmt = env.DB.prepare(

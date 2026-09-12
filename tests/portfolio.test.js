@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   parseNeverlessCSV, parseRevolutRows, parseV1Export, computeHoldings, computePortfolioSummary,
-  dedupeTransactions, TRACKED_ASSETS,
+  dedupeTransactions, TRACKED_ASSETS, computeAccruedInterestEur, INTEREST_EUR_TABLE,
 } from '../engine/portfolio.js';
 
 test('parseNeverlessCSV: extracts a BUY when a tracked asset is received', () => {
@@ -210,4 +210,43 @@ test('parseV1Export: skips non-tracked assets and non-buy types', () => {
     { id: 'x2', date: '2026-05-01', asset: 'BTC', acct: 'Neverless', type: 'sell', qty: 1, usd: 90000 },
   ];
   assert.deepEqual(parseV1Export(txs), []);
+});
+
+test('computeAccruedInterestEur: returns the exact embedded value for a date within the table', () => {
+  assert.equal(computeAccruedInterestEur('2026-06-26'), 15.67);
+  assert.equal(computeAccruedInterestEur('2026-04-11'), 0.0);
+});
+
+test('computeAccruedInterestEur: extrapolates linearly past the last embedded date using the last 5 days\u2019 daily rate', () => {
+  const ks = Object.keys(INTEREST_EUR_TABLE).sort();
+  const last = ks[ks.length - 1];
+  const dailyRate = (INTEREST_EUR_TABLE[last] - INTEREST_EUR_TABLE[ks[ks.length - 6]]) / 5;
+  const oneDayPast = computeAccruedInterestEur('2026-06-27');
+  assert.ok(Math.abs(oneDayPast - (INTEREST_EUR_TABLE[last] + dailyRate)) < 1e-9);
+});
+
+test('computeAccruedInterestEur: matches V1\u2019s confirmed live extrapolation for 2026-09-12 (\u20ac31.75, ~$36.89 at fx 1.1618)', () => {
+  const eur = computeAccruedInterestEur('2026-09-12');
+  assert.ok(Math.abs(eur - 31.752) < 0.01, `expected ~31.752, got ${eur}`);
+});
+
+test('computePortfolioSummary: cash interest adds to total value and P&L but never to invested capital', () => {
+  const holdings = { BTC: { quantity: 1, investedCost: 50000 } };
+  const prices = { BTC: 60000 };
+  const withoutInterest = computePortfolioSummary(holdings, prices);
+  const withInterest = computePortfolioSummary(holdings, prices, { usd: 100, eur: 86, fx: 1.1628 });
+  assert.equal(withoutInterest.totalValue, 60000);
+  assert.equal(withInterest.totalValue, 60100);
+  assert.equal(withInterest.cryptoValue, 60000, 'cryptoValue should stay the crypto-only figure');
+  assert.equal(withInterest.investedCapital, 50000, 'interest must never inflate invested capital');
+  assert.equal(withInterest.unrealizedPnl, 10100);
+  assert.equal(withInterest.cashInterestUsd, 100);
+});
+
+test('computePortfolioSummary: with no cash interest supplied, behaves exactly as before (backward compatible)', () => {
+  const holdings = { ETH: { quantity: 2, investedCost: 4000 } };
+  const prices = { ETH: 2500 };
+  const summary = computePortfolioSummary(holdings, prices);
+  assert.equal(summary.totalValue, 5000);
+  assert.equal(summary.cashInterestUsd, 0);
 });

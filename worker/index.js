@@ -13,8 +13,8 @@ import { runIngestCycle } from './ingest.js';
 import { aggregateHealth } from '../engine/health.js';
 import { computePerformance } from '../engine/performance.js';
 import {
-  parseNeverlessCSV, parseRevolutRows, parseV1Export, computeHoldings,
-  computePortfolioSummary, computeNormalizedBenchmark, computePortfolioInsights, TRACKED_ASSETS,
+  parseNeverlessCSV, parseRevolutRows, parseV1Export,
+  computeNormalizedBenchmark, computePortfolioInsights, TRACKED_ASSETS,
 } from '../engine/portfolio.js';
 import * as portfolio from './portfolio.js';
 
@@ -144,9 +144,7 @@ async function handleAssetDetail(env, assetId) {
   let position = null;
   const transactions = await portfolio.getAllTransactions(env.DB);
   if (transactions.some((t) => t.asset === assetId.toUpperCase())) {
-    const holdings = computeHoldings(transactions);
-    const prices = await portfolio.getCurrentPrices(env);
-    const summary = computePortfolioSummary(holdings, prices);
+    const summary = await portfolio.buildPortfolioSummary(env);
     position = summary.byAsset.find((r) => r.asset === assetId.toUpperCase()) ?? null;
   }
 
@@ -253,25 +251,17 @@ async function handlePortfolioSummary(env) {
   if (!transactions.length) {
     return json({ hasData: false, message: 'No portfolio transactions imported yet.', trackedAssets: TRACKED_ASSETS });
   }
-  const holdings = computeHoldings(transactions);
-  const prices = await portfolio.getCurrentPrices(env);
-  const summary = computePortfolioSummary(holdings, prices);
+  const summary = await portfolio.buildPortfolioSummary(env);
   return json({ hasData: true, ...summary, trackedAssets: TRACKED_ASSETS });
 }
 
 async function handlePortfolioAssets(env) {
-  const transactions = await portfolio.getAllTransactions(env.DB);
-  const holdings = computeHoldings(transactions);
-  const prices = await portfolio.getCurrentPrices(env);
-  const summary = computePortfolioSummary(holdings, prices);
+  const summary = await portfolio.buildPortfolioSummary(env);
   return json({ assets: summary.byAsset });
 }
 
 async function handlePortfolioAllocation(env) {
-  const transactions = await portfolio.getAllTransactions(env.DB);
-  const holdings = computeHoldings(transactions);
-  const prices = await portfolio.getCurrentPrices(env);
-  const summary = computePortfolioSummary(holdings, prices);
+  const summary = await portfolio.buildPortfolioSummary(env);
   return json({
     allocation: summary.byAsset.map((r) => ({ asset: r.asset, value: r.value, allocationPct: r.allocationPct })),
     pricesComplete: summary.pricesComplete,
@@ -302,9 +292,7 @@ async function handlePortfolioInsightsEndpoint(env) {
   if (!transactions.length) {
     return json({ insights: [] });
   }
-  const holdings = computeHoldings(transactions);
-  const prices = await portfolio.getCurrentPrices(env);
-  const summary = computePortfolioSummary(holdings, prices);
+  const summary = await portfolio.buildPortfolioSummary(env);
   const insights = computePortfolioInsights(summary);
   return json({ insights });
 }

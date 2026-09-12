@@ -177,7 +177,55 @@ export function computeHoldings(transactions) {
   return holdings;
 }
 
-export function computePortfolioSummary(holdings, currentPrices) {
+/**
+ * Accrued EUR cash-balance interest, ported from V1's frontend (INTEREST_EUR /
+ * interestEUR()). This tracks interest on a EUR cash balance sitting in
+ * Neverless/Revolut — entirely separate from the 5 crypto assets and their
+ * transaction ledger. Confirmed against V1's live D1 data: this is exactly
+ * the ~$37 gap between V4's crypto-only total and V1's displayed total.
+ *
+ * The embedded table only has real daily values through 2026-06-26; V1's own
+ * code extrapolates linearly beyond that using the last 5 known days' daily
+ * increment, rather than re-deriving the rate. Ported faithfully, including
+ * that same staleness — this is an estimate past June 26, not a live figure,
+ * in V1 just as much as here.
+ */
+export const INTEREST_EUR_TABLE = {
+  '2026-04-11': 0.0, '2026-04-12': 0.2062, '2026-04-13': 0.4124, '2026-04-14': 0.6186, '2026-04-15': 0.8247,
+  '2026-04-16': 1.0309, '2026-04-17': 1.2371, '2026-04-18': 1.4433, '2026-04-19': 1.6495, '2026-04-20': 1.8557,
+  '2026-04-21': 2.0618, '2026-04-22': 2.268, '2026-04-23': 2.4742, '2026-04-24': 2.6804, '2026-04-25': 2.8866,
+  '2026-04-26': 3.0928, '2026-04-27': 3.2989, '2026-04-28': 3.5051, '2026-04-29': 3.7113, '2026-04-30': 3.9175,
+  '2026-05-01': 4.1237, '2026-05-02': 4.3299, '2026-05-03': 4.5361, '2026-05-04': 4.7422, '2026-05-05': 4.9484,
+  '2026-05-06': 5.1546, '2026-05-07': 5.3608, '2026-05-08': 5.567, '2026-05-09': 5.7732, '2026-05-10': 5.9793,
+  '2026-05-11': 6.1855, '2026-05-12': 6.3917, '2026-05-13': 6.5979, '2026-05-14': 6.8041, '2026-05-15': 7.0103,
+  '2026-05-16': 7.2164, '2026-05-17': 7.4226, '2026-05-18': 7.6288, '2026-05-19': 7.835, '2026-05-20': 8.0412,
+  '2026-05-21': 8.2474, '2026-05-22': 8.4536, '2026-05-23': 8.6597, '2026-05-24': 8.8659, '2026-05-25': 9.0721,
+  '2026-05-26': 9.2783, '2026-05-27': 9.4845, '2026-05-28': 9.6907, '2026-05-29': 9.8968, '2026-05-30': 10.103,
+  '2026-05-31': 10.3092, '2026-06-01': 10.5154, '2026-06-02': 10.7216, '2026-06-03': 10.9278, '2026-06-04': 11.1339,
+  '2026-06-05': 11.3401, '2026-06-06': 11.5463, '2026-06-07': 11.7525, '2026-06-08': 11.9587, '2026-06-09': 12.1649,
+  '2026-06-10': 12.3711, '2026-06-11': 12.5772, '2026-06-12': 12.7834, '2026-06-13': 12.9896, '2026-06-14': 13.1958,
+  '2026-06-15': 13.402, '2026-06-16': 13.6082, '2026-06-17': 13.8143, '2026-06-18': 14.0205, '2026-06-19': 14.2267,
+  '2026-06-20': 14.4329, '2026-06-21': 14.6391, '2026-06-22': 14.8453, '2026-06-23': 15.0514, '2026-06-24': 15.2576,
+  '2026-06-25': 15.4638, '2026-06-26': 15.67,
+};
+
+/** @param dateStr 'YYYY-MM-DD'. Exact port of V1's interestEUR(d). */
+export function computeAccruedInterestEur(dateStr) {
+  const ks = Object.keys(INTEREST_EUR_TABLE).sort();
+  let v = 0;
+  for (const k of ks) { if (k <= dateStr) v = INTEREST_EUR_TABLE[k]; else break; }
+  const last = ks[ks.length - 1];
+  if (dateStr > last) {
+    const n = ks.length;
+    const span = Math.min(5, n - 1);
+    const inc = span > 0 ? (INTEREST_EUR_TABLE[ks[n - 1]] - INTEREST_EUR_TABLE[ks[n - 1 - span]]) / span : 0;
+    const nd = Math.max(0, Math.round((new Date(dateStr) - new Date(last)) / 86_400_000));
+    v = INTEREST_EUR_TABLE[last] + inc * nd;
+  }
+  return v;
+}
+
+export function computePortfolioSummary(holdings, currentPrices, cashInterest = null) {
   const assets = Object.keys(holdings).filter((a) => holdings[a].quantity > 1e-12);
   let totalValue = 0;
   let investedCapital = 0;
@@ -203,14 +251,24 @@ export function computePortfolioSummary(holdings, currentPrices) {
     row.allocationPct = row.value != null && totalValue > 0 ? row.value / totalValue : null;
   }
 
-  const unrealizedPnl = allPricesKnown ? totalValue - investedCapital : null;
+  // Interest is real value but has no "cost" — it wasn't bought, so it flows
+  // straight into total value and P&L without touching invested capital,
+  // exactly matching V1's totals(): val+intr, cost unchanged.
+  const interestUsd = cashInterest?.usd ?? 0;
+  const totalValueWithInterest = totalValue + interestUsd;
+
+  const unrealizedPnl = allPricesKnown ? totalValueWithInterest - investedCapital : null;
   const unrealizedPnlPct = unrealizedPnl != null && investedCapital > 0 ? unrealizedPnl / investedCapital : null;
   const scored = byAsset.filter((r) => r.pnlPct != null);
   const best = scored.length ? scored.reduce((a, b) => (b.pnlPct > a.pnlPct ? b : a)) : null;
   const worst = scored.length ? scored.reduce((a, b) => (b.pnlPct < a.pnlPct ? b : a)) : null;
 
   return {
-    totalValue: allPricesKnown ? totalValue : null,
+    totalValue: allPricesKnown ? totalValueWithInterest : null,
+    cryptoValue: allPricesKnown ? totalValue : null,
+    cashInterestUsd: interestUsd,
+    cashInterestEur: cashInterest?.eur ?? 0,
+    eurUsdFx: cashInterest?.fx ?? null,
     investedCapital,
     unrealizedPnl,
     unrealizedPnlPct,

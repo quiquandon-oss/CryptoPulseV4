@@ -39,6 +39,23 @@ export async function fetchCandles(coin, interval, lookbackMs, fetchImpl = fetch
     .sort((a, b) => a.ts - b.ts);
 }
 
+/**
+ * Live EUR->USD rate via Frankfurter (same source and fallback V1 uses:
+ * FX0=1.1385). Used only for the ported cash-interest figure — the crypto
+ * asset conversions elsewhere in this app don't need this, since portfolio
+ * prices are already fetched directly in USD.
+ */
+export async function fetchEurUsdRate(fetchImpl = fetch) {
+  try {
+    const res = await fetchImpl('https://api.frankfurter.dev/v2/rate/EUR/USD');
+    if (!res.ok) throw new Error(`Frankfurter HTTP ${res.status}`);
+    const json = await res.json();
+    if (typeof json.rate !== 'number') throw new Error('Unexpected Frankfurter response shape');
+    return json.rate;
+  } catch {
+    return 1.1385; // V1's own hardcoded fallback (FX0) — kept identical for consistency
+  }
+}
 /** Fetches candles for every configured asset; a failure on one asset never blocks the others. */
 export async function fetchAllCandles(assets, interval, lookbackMs, fetchImpl = fetch) {
   const results = {};
