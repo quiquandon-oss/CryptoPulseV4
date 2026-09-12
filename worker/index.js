@@ -62,6 +62,9 @@ export default {
       if (parts[1] === 'portfolio' && parts[2] === 'import' && request.method === 'POST') {
         return await handlePortfolioImport(request, env);
       }
+      if (parts[1] === 'portfolio' && parts[2] === 'backfill' && request.method === 'POST') {
+        return await handlePortfolioBackfill(request, env);
+      }
       if (parts[1] === 'portfolio' && parts[2] === 'assets') {
         return await handlePortfolioAssets(env);
       }
@@ -244,6 +247,15 @@ async function handlePortfolioImport(request, env) {
   const result = await portfolio.insertTransactions(env.DB, transactions);
   const summary = await portfolio.computeAndStoreSnapshot(env);
   return json({ ok: true, receivedRows: rows.length, extracted: transactions.length, ...result, summary });
+}
+
+async function handlePortfolioBackfill(request, env) {
+  const auth = request.headers.get('Authorization');
+  if (!env.INGEST_TOKEN || auth !== `Bearer ${env.INGEST_TOKEN}`) {
+    return json({ error: 'unauthorized' }, 401);
+  }
+  const result = await portfolio.backfillHistoricalSnapshots(env);
+  return json({ ok: true, ...result });
 }
 
 async function handlePortfolioSummary(env) {

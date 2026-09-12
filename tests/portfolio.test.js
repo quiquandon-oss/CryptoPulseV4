@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   parseNeverlessCSV, parseRevolutRows, parseV1Export, computeHoldings, computePortfolioSummary,
   dedupeTransactions, TRACKED_ASSETS, computeAccruedInterestEur, INTEREST_EUR_TABLE,
+  reconstructHistoricalSnapshots,
 } from '../engine/portfolio.js';
 
 test('parseNeverlessCSV: extracts a BUY when a tracked asset is received', () => {
@@ -249,4 +250,32 @@ test('computePortfolioSummary: with no cash interest supplied, behaves exactly a
   const summary = computePortfolioSummary(holdings, prices);
   assert.equal(summary.totalValue, 5000);
   assert.equal(summary.cashInterestUsd, 0);
+});
+
+test('reconstructHistoricalSnapshots: only counts transactions that happened by that day', () => {
+  const txs = [
+    { asset: 'BTC', type: 'BUY', quantity: 1, unitPriceUsd: 50000, timestamp: Date.parse('2026-04-11T12:00:00Z') },
+    { asset: 'BTC', type: 'BUY', quantity: 1, unitPriceUsd: 60000, timestamp: Date.parse('2026-04-13T12:00:00Z') },
+  ];
+  const prices = { BTC: { '2026-04-11': 51000, '2026-04-12': 52000, '2026-04-13': 53000 } };
+  const [d11, d12, d13] = reconstructHistoricalSnapshots(txs, prices, ['2026-04-11', '2026-04-12', '2026-04-13']);
+  assert.equal(d11.totalValue, 51000, 'only the first BTC is held on the 11th');
+  assert.equal(d12.totalValue, 52000, 'still just the first BTC — the second buy is two days away');
+  assert.equal(d13.totalValue, 106000, 'both BTC now held, priced at the 13th\u2019s close');
+});
+
+test('reconstructHistoricalSnapshots: a day with no available price for a held asset is marked incomplete, not guessed', () => {
+  const txs = [{ asset: 'LINK', type: 'BUY', quantity: 10, unitPriceUsd: 10, timestamp: Date.parse('2026-04-11T00:00:00Z') }];
+  const prices = { LINK: { '2026-04-11': 11 } }; // no entry for the 12th
+  const [, d12] = reconstructHistoricalSnapshots(txs, prices, ['2026-04-11', '2026-04-12']);
+  assert.equal(d12.totalValue, null);
+  assert.equal(d12.pricesComplete, false);
+});
+
+test('reconstructHistoricalSnapshots: applies the supplied per-date interest function', () => {
+  const txs = [{ asset: 'BTC', type: 'BUY', quantity: 1, unitPriceUsd: 50000, timestamp: Date.parse('2026-04-11T00:00:00Z') }];
+  const prices = { BTC: { '2026-04-11': 51000 } };
+  const [d] = reconstructHistoricalSnapshots(txs, prices, ['2026-04-11'], () => ({ usd: 5, eur: 4.3, fx: 1.16 }));
+  assert.equal(d.totalValue, 51005);
+  assert.equal(d.cashInterestUsd, 5);
 });

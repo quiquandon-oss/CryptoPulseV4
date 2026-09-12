@@ -56,6 +56,27 @@ export async function fetchEurUsdRate(fetchImpl = fetch) {
     return 1.1385; // V1's own hardcoded fallback (FX0) — kept identical for consistency
   }
 }
+/**
+ * Historical EUR->USD rate for a specific date, via Frankfurter's date-scoped
+ * endpoint. Falls back to V1's own hardcoded monthly-bucket approximation
+ * (ported verbatim: <=Apr 1.175, May 1.16, else 1.145) if the live historical
+ * lookup fails — a real historical rate is preferred when available, but a
+ * rough-but-reasonable fallback beats leaving a backfilled day's interest
+ * conversion silently wrong.
+ */
+export async function fetchHistoricalEurUsdRate(dateStr, fetchImpl = fetch) {
+  try {
+    const res = await fetchImpl(`https://api.frankfurter.dev/v2/${dateStr}/rate/EUR/USD`);
+    if (!res.ok) throw new Error(`Frankfurter HTTP ${res.status}`);
+    const json = await res.json();
+    if (typeof json.rate !== 'number') throw new Error('Unexpected Frankfurter response shape');
+    return json.rate;
+  } catch {
+    const month = Number(dateStr.slice(5, 7));
+    return month <= 4 ? 1.175 : month === 5 ? 1.16 : 1.145;
+  }
+}
+
 /** Fetches candles for every configured asset; a failure on one asset never blocks the others. */
 export async function fetchAllCandles(assets, interval, lookbackMs, fetchImpl = fetch) {
   const results = {};

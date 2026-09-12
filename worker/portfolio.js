@@ -3,8 +3,8 @@
 // I/O layer for the portfolio feature. Pure calculation lives in
 // engine/portfolio.js; this file only touches D1 and the market data source.
 
-import { TRACKED_ASSETS, computeHoldings, computePortfolioSummary, dedupeTransactions, computeAccruedInterestEur } from '../engine/portfolio.js';
-import { fetchCandles, fetchEurUsdRate } from './data-source.js';
+import { TRACKED_ASSETS, computeHoldings, computePortfolioSummary, dedupeTransactions, computeAccruedInterestEur, reconstructHistoricalSnapshots } from '../engine/portfolio.js';
+import { fetchCandles, fetchEurUsdRate, fetchHistoricalEurUsdRate } from './data-source.js';
 
 export async function getCurrentPrices(env) {
   const prices = {};
@@ -89,6 +89,83 @@ export async function computeAndStoreSnapshot(env, now = Date.now()) {
   }
 
   return summary;
+}
+
+/**
+ * One-time (idempotent — safe to re-run) reconstruction of the equity curve
+ * from the earliest transaction up to yesterday. "Today" is deliberately
+ * excluded: the live ingest/portfolio path already covers it with a genuinely
+ * live intraday price, and re-deriving it here from a daily close would be a
+ * downgrade, not an improvement.
+ *
+ * Historical FX is fetched once per calendar month in range (not once per
+ * day) to keep this to a handful of requests rather than ~150.
+ */
+export async function backfillHistoricalSnapshots(env, now = Date.now()) {
+  const transactions = await getAllTransactions(env.DB);
+  if (!transactions.length) return { backfilled: 0, message: 'No transactions to backfill from.' };
+
+  const earliestTs = Math.min(...transactions.map((t) => t.timestamp));
+  const startDate = new Date(earliestTs); startDate.setUTCHours(0, 0, 0, 0);
+  const today = new Date(now); today.setUTCHours(0, 0, 0, 0);
+
+  const dates = [];
+  for (const d = new Date(startDate); d < today; d.setUTCDate(d.getUTCDate() + 1)) {
+    dates.push(d.toISOString().slice(0, 10));
+  }
+  if (!dates.length) return { backfilled: 0, message: 'Nothing to backfill — earliest transaction is today or later.' };
+
+  const lookbackMs = (now - earliestTs) + 2 * 86_400_000;
+  const dailyPricesByAssetDate = {};
+  const priceFetchIssues = [];
+  for (const asset of TRACKED_ASSETS) {
+    dailyPricesByAssetDate[asset] = {};
+    try {
+      const candles = await fetchCandles(asset, '1d', lookbackMs);
+      for (const c of candles) dailyPricesByAssetDate[asset][new Date(c.ts).toISOString().slice(0, 10)] = c.close;
+    } catch (err) {
+      priceFetchIssues.push(`${asset}: ${err}`);
+    }
+  }
+
+  const fxByMonth = {};
+  for (const dateStr of dates) {
+    const monthKey = dateStr.slice(0, 7);
+    if (!(monthKey in fxByMonth)) {
+      fxByMonth[monthKey] = await fetchHistoricalEurUsdRate(`${monthKey}-01`);
+    }
+  }
+  const interestForDate = (dateStr) => {
+    const eur = computeAccruedInterestEur(dateStr);
+    const fx = fxByMonth[dateStr.slice(0, 7)];
+    return { eur, usd: eur * fx, fx };
+  };
+
+  const snapshots = reconstructHistoricalSnapshots(transactions, dailyPricesByAssetDate, dates, interestForDate);
+
+  const snapStmt = env.DB.prepare(
+    `INSERT OR IGNORE INTO portfolio_snapshots (id, ts, total_value_usd, invested_capital_usd, unrealized_pnl_usd, unrealized_pnl_pct, prices_complete, cash_interest_usd, cash_interest_eur, eur_usd_fx, source)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+  );
+  await env.DB.batch(snapshots.map((s) =>
+    snapStmt.bind(`backfill_${s.dateStr}`, s.ts, s.totalValue, s.investedCapital, s.unrealizedPnl, s.unrealizedPnlPct,
+      s.pricesComplete ? 1 : 0, s.cashInterestUsd, s.cashInterestEur, s.eurUsdFx, 'V4_BACKFILL')));
+
+  const assetStmt = env.DB.prepare(
+    `INSERT OR IGNORE INTO portfolio_asset_snapshots (id, ts, asset_id, quantity, price_usd, value_usd, invested_value_usd, unrealized_pnl_usd, allocation_pct, source)
+     VALUES (?,?,?,?,?,?,?,?,?,?)`,
+  );
+  const assetBinds = snapshots.flatMap((s) => s.byAsset.map((row) =>
+    assetStmt.bind(`backfill_${row.asset}_${s.dateStr}`, s.ts, row.asset, row.quantity, row.currentPrice, row.value, row.investedCost, row.pnl, row.allocationPct, 'V4_BACKFILL')));
+  if (assetBinds.length) await env.DB.batch(assetBinds);
+
+  const incompleteDays = snapshots.filter((s) => !s.pricesComplete).length;
+  return {
+    backfilled: snapshots.length,
+    dateRange: [dates[0], dates[dates.length - 1]],
+    incompleteDays,
+    priceFetchIssues,
+  };
 }
 
 export async function getPortfolioHistory(db, sinceTs) {

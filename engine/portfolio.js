@@ -279,6 +279,36 @@ export function computePortfolioSummary(holdings, currentPrices, cashInterest = 
   };
 }
 
+/**
+ * Reconstructs one portfolio summary per day in `dates`, replaying the exact
+ * same computeHoldings/computePortfolioSummary logic the live path uses —
+ * just at a historical date instead of "now". Holdings as of a given day only
+ * include transactions up to that day's end; a day with no available price
+ * for a held asset comes back with totalValue: null (pricesComplete: false),
+ * same convention as the live path — never a guessed price.
+ *
+ * @param transactions            full transaction list
+ * @param dailyPricesByAssetDate  { [asset]: { [dateStr 'YYYY-MM-DD']: closePrice } }
+ * @param dates                   'YYYY-MM-DD' strings to reconstruct, any order
+ * @param interestForDate         optional (dateStr) => {usd,eur,fx} | null
+ */
+export function reconstructHistoricalSnapshots(transactions, dailyPricesByAssetDate, dates, interestForDate = null) {
+  return dates.map((dateStr) => {
+    const dayEndTs = Date.parse(`${dateStr}T23:59:59.999Z`);
+    const txsUpToDay = transactions.filter((t) => t.timestamp <= dayEndTs);
+    const holdings = computeHoldings(txsUpToDay);
+
+    const prices = {};
+    for (const asset of Object.keys(dailyPricesByAssetDate)) {
+      prices[asset] = dailyPricesByAssetDate[asset][dateStr] ?? null;
+    }
+
+    const cashInterest = interestForDate ? interestForDate(dateStr) : null;
+    const summary = computePortfolioSummary(holdings, prices, cashInterest);
+    return { dateStr, ts: dayEndTs, ...summary };
+  });
+}
+
 export function dedupeTransactions(transactions) {
   const seen = new Set();
   const out = [];
