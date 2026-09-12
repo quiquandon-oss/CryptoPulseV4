@@ -15,7 +15,7 @@ import { evaluateIndicators, computeAgreement } from '../engine/evidence.js';
 import { classifyRegime } from '../engine/regime.js';
 import { buildSignal } from '../engine/signal.js';
 import { buildPendingOutcomes, resolveOutcome, OUTCOME_STATUS } from '../engine/outcomes.js';
-import { computePerformance } from '../engine/performance.js';
+import { computePerformance, computePerformanceBySegment } from '../engine/performance.js';
 import { classifyFreshness } from '../engine/freshness.js';
 import { explainSignal } from '../engine/explain.js';
 import { fetchAllCandles } from './data-source.js';
@@ -117,14 +117,28 @@ export async function refreshPerformanceMetrics(env) {
   const assets = await db.listAssets(env.DB);
   for (const asset of assets) {
     for (const horizon of ['12h', '24h']) {
-      const outcomes = await db.getResolvedOutcomes(env.DB, { assetId: asset.id, horizon });
-      const perf = computePerformance(outcomes.map((o) => ({ actualReturn: o.actual_return, success: o.success === null ? null : !!o.success })));
+      const outcomes = await db.getResolvedOutcomesWithRegime(env.DB, { assetId: asset.id, horizon });
+      const toScored = (o) => ({ actualReturn: o.actual_return, success: o.success === null ? null : !!o.success });
+
+      // Overall (ALL regimes) aggregate — the primary number shown on the asset page.
+      const overall = computePerformance(outcomes.map(toScored));
       await db.upsertPerformanceMetric(env.DB, {
-        id: `${asset.id}_${horizon}_ALL`, assetId: asset.id, horizon, regime: null,
-        samples: perf.samples, status: perf.status,
-        winRate: perf.winRate, avgReturn: perf.avgReturn, medianReturn: perf.medianReturn,
-        bestReturn: perf.bestReturn, worstReturn: perf.worstReturn,
+        id: `${asset.id}_${horizon}_ALL`, assetId: asset.id, horizon, regime: 'ALL',
+        samples: overall.samples, status: overall.status,
+        winRate: overall.winRate, avgReturn: overall.avgReturn, medianReturn: overall.medianReturn,
+        bestReturn: overall.bestReturn, worstReturn: overall.worstReturn,
       });
+
+      // Per-regime segments — real segmentation per spec section 11, not fabricated.
+      const byRegime = computePerformanceBySegment(outcomes.map((o) => ({ ...toScored(o), regime: o.signal_regime })), (o) => o.regime);
+      for (const [regime, perf] of Object.entries(byRegime)) {
+        await db.upsertPerformanceMetric(env.DB, {
+          id: `${asset.id}_${horizon}_${regime}`, assetId: asset.id, horizon, regime,
+          samples: perf.samples, status: perf.status,
+          winRate: perf.winRate, avgReturn: perf.avgReturn, medianReturn: perf.medianReturn,
+          bestReturn: perf.bestReturn, worstReturn: perf.worstReturn,
+        });
+      }
     }
   }
 }

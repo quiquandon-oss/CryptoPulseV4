@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CryptoPulse V4 — Performance</title>
+<script>
+  (function () {
+    var saved = localStorage.getItem('v4-theme');
+    var theme = saved || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    if (theme === 'light') document.documentElement.setAttribute('data-theme', 'light');
+  })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="theme.css" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: { fontFamily: { sans: ['Inter', 'sans-serif'], mono: ['"IBM Plex Mono"', 'monospace'] } } } };
+</script>
+</head>
+<body class="bg-base text-ink font-sans min-h-screen">
+<div class="max-w-3xl mx-auto px-4 sm:px-6 py-8">
+  <div class="flex items-center justify-between mb-3">
+    <a href="index.html" class="text-xs text-faint hover-text-muted">&larr; Market overview</a>
+    <button class="theme-toggle" aria-label="Toggle theme" title="Toggle light/dark theme">
+      <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/></svg>
+    </button>
+  </div>
+  <nav id="siteNav" class="flex items-center gap-1 mb-4 overflow-x-auto"></nav>
+  <h1 class="font-mono font-semibold text-lg mb-1">Performance</h1>
+  <p class="text-xs text-faint mb-6 pb-4 border-b border-border">Win rate is withheld below 20 resolved observations per segment — see <a class="underline decoration-faint" href="audit.html">Audit</a> for why.</p>
+
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-5">
+    <select id="fAsset" class="bg-surface border border-border rounded-md text-sm px-2 py-1.5 text-ink">
+      <option value="">All assets</option>
+      <option value="BTC">BTC</option>
+      <option value="ETH">ETH</option>
+      <option value="LINK">LINK</option>
+    </select>
+    <select id="fHorizon" class="bg-surface border border-border rounded-md text-sm px-2 py-1.5 text-ink">
+      <option value="">All horizons</option>
+      <option value="12h">12h</option>
+      <option value="24h">24h</option>
+    </select>
+    <select id="fRegime" class="bg-surface border border-border rounded-md text-sm px-2 py-1.5 text-ink">
+      <option value="">All regimes</option>
+      <option value="ALL">Aggregate (ALL)</option>
+      <option value="TRENDING_BULLISH">Trending bullish</option>
+      <option value="TRENDING_BEARISH">Trending bearish</option>
+      <option value="RANGE_BOUND">Range bound</option>
+      <option value="HIGH_VOLATILITY">High volatility</option>
+      <option value="LOW_VOLATILITY">Low volatility</option>
+      <option value="TRANSITION">Transition</option>
+      <option value="UNKNOWN">Unknown</option>
+    </select>
+    <input id="fSince" type="date" class="bg-surface border border-border rounded-md text-sm px-2 py-1.5 text-ink" title="Resolved on/after this date (switches to a live ad-hoc calculation)">
+  </div>
+
+  <div id="results" class="border border-border rounded-lg divide-y divide-border">
+    <div class="px-4 py-6 text-sm text-faint">Loading…</div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+<script>
+renderNav('performance.html');
+const el = { asset: document.getElementById('fAsset'), horizon: document.getElementById('fHorizon'), regime: document.getElementById('fRegime'), since: document.getElementById('fSince'), results: document.getElementById('results') };
+
+function regimeLabel(r) { return r ? r.replaceAll('_', ' ') : '—'; }
+
+async function loadPerformance() {
+  el.results.innerHTML = '<div class="px-4 py-6 text-sm text-faint">Loading…</div>';
+  const qs = new URLSearchParams();
+  if (el.asset.value) qs.set('asset', el.asset.value);
+  if (el.horizon.value) qs.set('horizon', el.horizon.value);
+  if (el.regime.value) qs.set('regime', el.regime.value);
+  if (el.since.value) qs.set('since', el.since.value);
+
+  try {
+    const { performance } = await v4Fetch(`/api/performance?${qs.toString()}`);
+    if (!performance.length) {
+      el.results.innerHTML = '<div class="px-4 py-6 text-sm text-faint">No matching performance rows yet.</div>';
+      return;
+    }
+    el.results.innerHTML = performance.map((r) => `
+      <div class="px-4 py-3">
+        <div class="flex items-center justify-between mb-1">
+          <span class="font-mono text-sm">${r.asset_id || 'All assets'} · ${r.horizon || 'all horizons'}</span>
+          <span class="text-xs text-muted">${regimeLabel(r.regime)}${r.ad_hoc ? ' · live calc' : ''}</span>
+        </div>
+        ${r.status === 'OK' ? `
+          <div class="grid grid-cols-3 gap-2 text-xs text-muted mt-2">
+            <div><span class="block text-faint">Win rate</span><span class="text-ink text-sm">${fmtPct(r.win_rate)}</span></div>
+            <div><span class="block text-faint">Avg return</span><span class="${r.avg_return >= 0 ? 'text-up' : 'text-down'} text-sm">${fmtPct(r.avg_return)}</span></div>
+            <div><span class="block text-faint">Samples</span><span class="text-ink text-sm">${r.samples}</span></div>
+          </div>` : `<p class="text-sm text-faint">Insufficient evidence — ${r.samples} resolved observation${r.samples === 1 ? '' : 's'}.</p>`}
+      </div>`).join('');
+  } catch (err) {
+    el.results.innerHTML = `<div class="px-4 py-6 text-sm text-down">${escapeHtml(err.message)}</div>`;
+  }
+}
+
+[el.asset, el.horizon, el.regime, el.since].forEach((input) => input.addEventListener('change', loadPerformance));
+loadPerformance();
+</script>
+</body>
+</html>

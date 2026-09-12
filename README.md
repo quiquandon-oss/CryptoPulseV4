@@ -13,11 +13,13 @@ and `project-docs/DATA_CONTRACT.md` for the schema.
 
 Engine layer (indicators, evidence, regime, signal, outcomes, performance,
 freshness, health, AI explanation) is built and unit tested — `npm test`
-(62 tests, `node --test`, zero dependencies). Worker API, D1 schema, and a
-3-page frontend (dashboard / asset detail / data health) are built. The D1
-database is live and migrated. **Not yet deployed** — see "Deploy" below for
-the two steps that need your credentials, which this pipeline can't supply on
-its own.
+(62 tests, `node --test`, zero dependencies). Worker API, D1 schema, and the
+full 6-page frontend (dashboard, asset detail with a price+signal chart,
+performance with asset/horizon/regime/date-range filters, data health, audit,
+settings) are built and deployed. Light and dark themes are both implemented
+(toggle in the header, or in Settings). **Live**: worker at
+`cryptopulse-v4.quiquandon.workers.dev`, site at
+`https://quiquandon-oss.github.io/CryptoPulseV4/`.
 
 ## Local development
 
@@ -57,12 +59,9 @@ Performance stats are withheld below 20 resolved observations
 
 ## What's next
 
-- Signal-timeline chart and price+signal overlay (spec sections 18–19) —
-  the API (`/api/assets/:asset/history`) already returns the data; the
-  frontend currently only shows the latest signal, not the chart.
-- Performance page filters (asset/horizon/regime/date range) and the
-  dedicated audit/transparency page (spec sections 20, 23).
-- Regime-segmented performance metrics (see `project-docs/DATA_CONTRACT.md`).
+- Regime-segmented performance has real per-regime rows now, but most
+  segments will show "Insufficient evidence" until more signals resolve —
+  that's the data-integrity rule working as intended, not a bug.
 - Mobile polish pass once real usage surfaces friction.
-- Empirical CPU-budget check on `/api/ingest` after the first live runs —
-  see the "CPU budget" section in `project-docs/ARCHITECTURE.md`.
+- Empirical CPU-budget check on `/api/ingest` after more live runs accumulate
+  — see the "CPU budget" section in `project-docs/ARCHITECTURE.md`.

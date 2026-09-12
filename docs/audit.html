@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CryptoPulse V4 — Audit</title>
+<script>
+  (function () {
+    var saved = localStorage.getItem('v4-theme');
+    var theme = saved || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    if (theme === 'light') document.documentElement.setAttribute('data-theme', 'light');
+  })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="theme.css" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: { fontFamily: { sans: ['Inter', 'sans-serif'], mono: ['"IBM Plex Mono"', 'monospace'] } } } };
+</script>
+</head>
+<body class="bg-base text-ink font-sans min-h-screen">
+<div class="max-w-3xl mx-auto px-4 sm:px-6 py-8">
+  <div class="flex items-center justify-between mb-3">
+    <a href="index.html" class="text-xs text-faint hover-text-muted">&larr; Market overview</a>
+    <button class="theme-toggle" aria-label="Toggle theme" title="Toggle light/dark theme">
+      <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/></svg>
+    </button>
+  </div>
+  <nav id="siteNav" class="flex items-center gap-1 mb-4 overflow-x-auto"></nav>
+  <h1 class="font-mono font-semibold text-lg mb-1">Audit</h1>
+  <p class="text-xs text-faint mb-6 pb-4 border-b border-border">Every displayed conclusion, traced back to the raw calculation that produced it.</p>
+
+  <div id="listView">
+    <div id="signalList" class="border border-border rounded-lg divide-y divide-border">
+      <div class="px-4 py-6 text-sm text-faint">Loading recent signals…</div>
+    </div>
+  </div>
+
+  <div id="detailView" class="hidden">
+    <button id="backToList" class="text-xs text-faint hover-text-muted mb-4">&larr; All signals</button>
+    <div id="detailContent"></div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+<script>
+renderNav('audit.html');
+
+const listEl = document.getElementById('signalList');
+const listView = document.getElementById('listView');
+const detailView = document.getElementById('detailView');
+const detailContent = document.getElementById('detailContent');
+
+function fieldRow(label, value) {
+  return `<div class="px-4 py-2.5 flex items-start justify-between gap-4 text-sm">
+    <span class="text-faint shrink-0">${escapeHtml(label)}</span>
+    <span class="font-mono text-right break-all">${value}</span>
+  </div>`;
+}
+
+async function loadList() {
+  try {
+    const { signals } = await v4Fetch('/api/signals?limit=30');
+    listEl.innerHTML = signals.length ? signals.map((s) => `
+      <button data-id="${s.id}" class="w-full text-left px-4 py-3 flex items-center justify-between hover-bg-surface transition-colors">
+        <span class="font-mono text-sm">${s.asset_id} <span class="${DIRECTION_COLOR[s.direction] || 'text-muted'}">${s.direction} ${s.score >= 0 ? '+' : ''}${s.score}</span></span>
+        <span class="text-xs text-faint">${new Date(s.ts).toLocaleString()}</span>
+      </button>`).join('') : '<div class="px-4 py-6 text-sm text-faint">No signals recorded yet.</div>';
+
+    listEl.querySelectorAll('button[data-id]').forEach((btn) => {
+      btn.addEventListener('click', () => loadDetail(btn.dataset.id));
+    });
+  } catch (err) {
+    listEl.innerHTML = `<div class="px-4 py-6 text-sm text-down">${escapeHtml(err.message)}</div>`;
+  }
+}
+
+async function loadDetail(signalId) {
+  listView.classList.add('hidden');
+  detailView.classList.remove('hidden');
+  detailContent.innerHTML = '<div class="px-4 py-6 text-sm text-faint">Loading…</div>';
+
+  try {
+    const d = await v4Fetch(`/api/signals/${signalId}`);
+    const s = d.signal;
+
+    const calcSection = `
+      <div class="mb-5">
+        <h2 class="text-xs text-faint mb-2">Signal calculation</h2>
+        <div class="border border-border rounded-lg divide-y divide-border">
+          ${fieldRow('Signal ID', s.id)}
+          ${fieldRow('Asset', s.asset_id)}
+          ${fieldRow('Calculation timestamp', new Date(s.ts).toISOString())}
+          ${fieldRow('Direction / score', `<span class="${DIRECTION_COLOR[s.direction] || ''}">${s.direction} ${s.score >= 0 ? '+' : ''}${s.score}</span>`)}
+          ${fieldRow('Evidence', `${s.evidence_bullish} bullish / ${s.evidence_bearish} bearish / ${s.evidence_applicable} applicable`)}
+          ${fieldRow('Agreement ratio', s.agreement_ratio != null ? s.agreement_ratio.toFixed(3) : 'null (insufficient evidence)')}
+          ${fieldRow('Regime', s.regime)}
+          ${fieldRow('Risk', s.risk)}
+          ${fieldRow('Persistence', `${s.persistence_count} consecutive, ${s.stability}`)}
+        </div>
+      </div>`;
+
+    const indicatorSection = `
+      <div class="mb-5">
+        <h2 class="text-xs text-faint mb-2">Indicator inputs &amp; outputs</h2>
+        <div class="border border-border rounded-lg divide-y divide-border">
+          ${d.indicators.map((i) => fieldRow(i.indicator, `value=${i.value ?? 'null'} state=${i.state ?? '—'} direction=${i.direction ?? '—'} applicable=${!!i.applicable}`)).join('')}
+        </div>
+      </div>`;
+
+    const outcomeSection = `
+      <div class="mb-5">
+        <h2 class="text-xs text-faint mb-2">Outcome resolution</h2>
+        <div class="border border-border rounded-lg divide-y divide-border">
+          ${d.outcomes.length ? d.outcomes.map((o) => fieldRow(
+            `${o.horizon} target`,
+            `status=${o.status} target_ts=${new Date(o.target_ts).toISOString()} entry=${o.entry_price} future=${o.future_price ?? 'null'} return=${o.actual_return != null ? (o.actual_return * 100).toFixed(2) + '%' : 'null'} success=${o.success === null ? 'null' : !!o.success}`
+          )).join('') : '<div class="px-4 py-3 text-sm text-faint">No outcome rows.</div>'}
+        </div>
+      </div>`;
+
+    const aiSection = `
+      <div class="mb-5">
+        <h2 class="text-xs text-faint mb-2">AI explanation metadata</h2>
+        <div class="border border-border rounded-lg divide-y divide-border">
+          ${d.explanation ? [
+            fieldRow('Model', d.explanation.model),
+            fieldRow('AI error', d.explanation.ai_error || 'none'),
+            fieldRow('Generated at', d.explanation.generated_at),
+          ].join('') : '<div class="px-4 py-3 text-sm text-faint">No AI explanation recorded for this signal (GEMINI_API_KEY not set at ingest time, or deterministic fallback used).</div>'}
+        </div>
+      </div>`;
+
+    detailContent.innerHTML = calcSection + indicatorSection + outcomeSection + aiSection;
+  } catch (err) {
+    detailContent.innerHTML = `<div class="px-4 py-6 text-sm text-down">${escapeHtml(err.message)}</div>`;
+  }
+}
+
+document.getElementById('backToList').addEventListener('click', () => {
+  detailView.classList.add('hidden');
+  listView.classList.remove('hidden');
+});
+
+loadList();
+</script>
+</body>
+</html>

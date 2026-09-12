@@ -128,6 +128,34 @@ export async function getResolvedOutcomes(db, filters = {}) {
   return results;
 }
 
+/** Same as getResolvedOutcomes but joins signals to expose the regime each outcome's signal was generated under. */
+export async function getResolvedOutcomesWithRegime(db, filters = {}) {
+  const clauses = [`so.status = 'RESOLVED'`];
+  const params = [];
+  if (filters.assetId) { clauses.push('so.asset_id = ?'); params.push(filters.assetId); }
+  if (filters.horizon) { clauses.push('so.horizon = ?'); params.push(filters.horizon); }
+  const { results } = await db
+    .prepare(`SELECT so.*, s.regime as signal_regime FROM signal_outcomes so
+              JOIN signals s ON s.id = so.signal_id
+              WHERE ${clauses.join(' AND ')} ORDER BY so.target_ts DESC`)
+    .bind(...params)
+    .all();
+  return results;
+}
+
+export async function listPerformanceMetrics(db, filters = {}) {
+  const clauses = ['1=1'];
+  const params = [];
+  if (filters.assetId) { clauses.push('asset_id = ?'); params.push(filters.assetId); }
+  if (filters.horizon) { clauses.push('horizon = ?'); params.push(filters.horizon); }
+  if (filters.regime) { clauses.push('regime = ?'); params.push(filters.regime); }
+  const { results } = await db
+    .prepare(`SELECT * FROM performance_metrics WHERE ${clauses.join(' AND ')} ORDER BY asset_id, horizon, regime`)
+    .bind(...params)
+    .all();
+  return results;
+}
+
 export async function upsertPerformanceMetric(db, row) {
   await db.prepare(
     `INSERT OR REPLACE INTO performance_metrics (id, asset_id, horizon, regime, samples, status, win_rate, avg_return, median_return, best_return, worst_return)

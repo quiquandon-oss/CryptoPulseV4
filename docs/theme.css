@@ -1,0 +1,80 @@
+/* docs/theme.css — shared across all V4 pages.
+   Semantic color classes (bg-base, text-ink, etc.) are plain CSS here rather
+   than Tailwind-generated utilities, specifically so they can be swapped at
+   runtime via the [data-theme] attribute without regenerating Tailwind's
+   config. Tailwind CDN is still used for layout (flex/grid/spacing/text-size). */
+
+:root {
+  --bg-base: #0B0D10;
+  --bg-surface: #12151A;
+  --bg-elevated: #171B21;
+  --border: #22262C;
+  --ink: #E6E8EB;
+  --muted: #8B92A0;
+  --faint: #565D68;
+  --accent: #5B8DEF;
+  --accent-soft: rgba(91, 141, 239, 0.08);
+  --accent-border: rgba(91, 141, 239, 0.3);
+  --up: #3FB97A;
+  --down: #E1604F;
+  --warn: #D9A441;
+  --scrollbar: #22262C;
+}
+
+:root[data-theme="light"] {
+  --bg-base: #F7F8FA;
+  --bg-surface: #FFFFFF;
+  --bg-elevated: #F0F2F5;
+  --border: #DDE1E6;
+  --ink: #1A1D21;
+  --muted: #5B6572;
+  --faint: #8A93A0;
+  --accent: #3A6FD8;
+  --accent-soft: rgba(58, 111, 216, 0.06);
+  --accent-border: rgba(58, 111, 216, 0.35);
+  --up: #1F9D5C;
+  --down: #C7402F;
+  --warn: #B37B15;
+  --scrollbar: #DDE1E6;
+}
+
+html, body { background: var(--bg-base); color: var(--ink); }
+body { font-feature-settings: "tnum" 1; transition: background-color 0.15s ease, color 0.15s ease; }
+::-webkit-scrollbar { height: 8px; width: 8px; }
+::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+.bg-base { background-color: var(--bg-base); }
+.bg-surface { background-color: var(--bg-surface); }
+.bg-elevated { background-color: var(--bg-elevated); }
+.border-border { border-color: var(--border); }
+.divide-border > * + * { border-color: var(--border); }
+.text-ink { color: var(--ink); }
+.text-muted { color: var(--muted); }
+.text-faint { color: var(--faint); }
+.text-accent { color: var(--accent); }
+.text-up { color: var(--up); }
+.text-down { color: var(--down); }
+.text-warn { color: var(--warn); }
+.bg-up { background-color: var(--up); }
+.bg-recent { background-color: var(--warn); }
+.bg-stale { background-color: var(--down); }
+.bg-unavailable { background-color: var(--faint); }
+.bg-accent-soft { background-color: var(--accent-soft); }
+.border-accent-30 { border-color: var(--accent-border); }
+.bg-up-10 { background-color: color-mix(in srgb, var(--up) 10%, transparent); }
+.bg-down-10 { background-color: color-mix(in srgb, var(--down) 10%, transparent); }
+.hover-bg-surface:hover { background-color: var(--bg-surface); }
+.hover-bg-elevated:hover { background-color: var(--bg-elevated); }
+.hover-text-muted:hover { color: var(--muted); }
+
+/* Theme toggle button */
+.theme-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--bg-surface); color: var(--muted); cursor: pointer;
+}
+.theme-toggle:hover { color: var(--ink); }
+.theme-toggle svg { width: 14px; height: 14px; }
+[data-theme="light"] .icon-moon { display: none; }
+:root:not([data-theme="light"]) .icon-sun { display: none; }

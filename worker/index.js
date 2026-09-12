@@ -11,6 +11,7 @@
 import * as db from './db.js';
 import { runIngestCycle } from './ingest.js';
 import { aggregateHealth } from '../engine/health.js';
+import { computePerformance } from '../engine/performance.js';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -49,6 +50,9 @@ export default {
       }
       if (parts[1] === 'market' && parts[2] === 'overview') {
         return await handleMarketOverview(env);
+      }
+      if (parts[1] === 'performance') {
+        return await handlePerformanceList(env, url);
       }
       if (parts[1] === 'assets' && parts[2] && parts[3] === 'history') {
         return await handleAssetHistory(env, parts[2], url);
@@ -115,7 +119,10 @@ async function handleAssetHistory(env, assetId, url) {
   const rangeMs = { '12h': 12, '24h': 24, '7d': 24 * 7, '30d': 24 * 30 }[range] * 3_600_000;
   const since = Date.now() - rangeMs;
   const { results } = await env.DB
-    .prepare('SELECT ts, direction, score FROM signals WHERE asset_id = ? AND ts >= ? ORDER BY ts ASC')
+    .prepare(`SELECT s.ts, s.direction, s.score, s.regime, ti.price
+              FROM signals s
+              LEFT JOIN technical_indicators ti ON ti.asset_id = s.asset_id AND ti.ts = s.ts
+              WHERE s.asset_id = ? AND s.ts >= ? ORDER BY s.ts ASC`)
     .bind(assetId.toUpperCase(), since).all();
   return json({ asset: assetId.toUpperCase(), range, points: results });
 }
@@ -123,6 +130,29 @@ async function handleAssetHistory(env, assetId, url) {
 async function handleAssetPerformance(env, assetId) {
   const rows = await db.getPerformanceMetrics(env.DB, assetId.toUpperCase());
   return json({ asset: assetId.toUpperCase(), performance: rows });
+}
+
+async function handlePerformanceList(env, url) {
+  const assetId = url.searchParams.get('asset')?.toUpperCase() || null;
+  const horizon = url.searchParams.get('horizon') || null;
+  const regime = url.searchParams.get('regime') || null;
+  const since = url.searchParams.get('since');
+  const until = url.searchParams.get('until');
+
+  if (since || until) {
+    // Date-range filtering isn't in the precomputed cache table, so compute it
+    // fresh from the resolved outcomes rather than approximating from the cache.
+    const outcomes = await db.getResolvedOutcomesWithRegime(env.DB, { assetId, horizon });
+    const sinceTs = since ? Date.parse(since) : -Infinity;
+    const untilTs = until ? Date.parse(until) : Infinity;
+    const filtered = outcomes.filter((o) =>
+      o.target_ts >= sinceTs && o.target_ts <= untilTs && (!regime || regime === 'ALL' || o.signal_regime === regime));
+    const perf = computePerformance(filtered.map((o) => ({ actualReturn: o.actual_return, success: o.success === null ? null : !!o.success })));
+    return json({ performance: [{ asset_id: assetId, horizon, regime: regime || 'ALL', ...perf, computed_at: new Date().toISOString(), ad_hoc: true }] });
+  }
+
+  const rows = await db.listPerformanceMetrics(env.DB, { assetId, horizon, regime });
+  return json({ performance: rows });
 }
 
 async function handleSignalsList(env, url) {
