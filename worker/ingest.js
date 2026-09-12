@@ -21,6 +21,7 @@ import { explainSignal } from '../engine/explain.js';
 import { fetchAllCandles } from './data-source.js';
 import * as db from './db.js';
 import * as portfolio from './portfolio.js';
+import * as marketPulse from './market_pulse.js';
 
 const INTERVAL = '1h';
 const LOOKBACK_MS = 60 * 24 * 3_600_000; // 60 days of hourly candles — covers Ichimoku's 52-period span
@@ -90,6 +91,16 @@ export async function runIngestCycle(env, now = Date.now()) {
     }
   }
   await db.upsertHealth(env.DB, 'database', 'database', 'OK', null, new Date(now).toISOString());
+
+  // Market Pulse: import V1's latest disclosed-half data (direct D1 binding,
+  // not an HTTP call — see wrangler.toml) and recompute the composite. Never
+  // blocks the rest of ingest if either step fails.
+  try {
+    await marketPulse.importV1History(env);
+    await marketPulse.computeAndStoreMarketPulse(env, now);
+  } catch (err) {
+    await db.upsertHealth(env.DB, 'market_pulse', 'market_pulse', 'ERROR', String(err), null);
+  }
 
   return summary;
 }

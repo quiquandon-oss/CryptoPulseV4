@@ -17,6 +17,7 @@ import {
   computeNormalizedBenchmark, computePortfolioInsights, TRACKED_ASSETS,
 } from '../engine/portfolio.js';
 import * as portfolio from './portfolio.js';
+import * as marketPulse from './market_pulse.js';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -52,6 +53,12 @@ export default {
       }
       if (parts[1] === 'signals') {
         return await handleSignalsList(env, url);
+      }
+      if (parts[1] === 'market-pulse' && parts[2] === 'history') {
+        return await handleMarketPulseHistory(env, url);
+      }
+      if (parts[1] === 'market-pulse') {
+        return await handleMarketPulseCurrent(env);
       }
       if (parts[1] === 'market' && parts[2] === 'overview') {
         return await handleMarketOverview(env);
@@ -278,6 +285,37 @@ async function handlePortfolioAllocation(env) {
     allocation: summary.byAsset.map((r) => ({ asset: r.asset, value: r.value, allocationPct: r.allocationPct })),
     pricesComplete: summary.pricesComplete,
   });
+}
+
+async function handleMarketPulseCurrent(env) {
+  const latest = await env.DB.prepare('SELECT * FROM market_pulse_snapshots ORDER BY ts DESC LIMIT 1').first();
+  if (!latest) {
+    return json({ marketPulse: null, label: null, reason: 'Insufficient evidence to determine the current Market Pulse.' });
+  }
+  return json({
+    ts: latest.ts,
+    marketPulse: latest.market_pulse,
+    label: latest.label,
+    partial: !!latest.partial,
+    partialReason: latest.partial_reason,
+    deterministicHalf: latest.deterministic_half,
+    disclosedHalf: latest.disclosed_half,
+    components: {
+      v4RegimeNorm: latest.v4_regime_norm,
+      v4CyclePositionNorm: latest.v4_cycle_position_norm,
+      sentimentNorm: latest.sentiment_norm,
+      cycleConvictionNeg1to1: latest.cycle_conviction_norm,
+    },
+    disclosure: latest.disclosure,
+  });
+}
+
+async function handleMarketPulseHistory(env, url) {
+  const range = url.searchParams.get('range') || '3M'; // spec: default 3M
+  const rangeMs = { '1W': 7, '1M': 30, '3M': 90, '6M': 180, '1Y': 365 }[range];
+  const since = rangeMs ? Date.now() - rangeMs * 86_400_000 : 0;
+  const points = await marketPulse.getMarketPulseHistory(env.DB, since);
+  return json({ range, points });
 }
 
 async function handlePortfolioHistory(env, url) {
