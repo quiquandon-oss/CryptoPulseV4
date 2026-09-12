@@ -63,8 +63,51 @@ test('parseRevolutRows: converts EUR price to USD using the supplied rate, and l
   assert.ok('priceApproximation' in tx);
 });
 
+test('parseRevolutRows: handles the real-world CSV export format — currency-formatted strings with corrupted encoding, human-readable dates with corrupted whitespace', () => {
+  // Actual bytes seen from a real Revolut CSV export: the € sign double-encoded,
+  // and a narrow-no-break-space before AM/PM similarly mangled.
+  const rows = [{ Symbol: 'ETH', Type: 'Buy', Quantity: '0.00001048', Price: '\u00e2\u00ac1,908.30', Value: '\u00e2\u00ac0.02', Fees: '\u00e2\u00ac0.00', Date: 'Apr 10, 2026, 3:41:03\u00e2\u0080\u00afPM' }];
+  const [tx] = parseRevolutRows(rows, 1.0);
+  assert.equal(tx.asset, 'ETH');
+  assert.equal(tx.quantity, 0.00001048);
+  assert.equal(tx.unitPriceUsd, 1908.30);
+  assert.equal(tx.timestamp, Date.parse('2026-04-10T15:41:03Z'));
+});
+
+test('parseRevolutRows: sourceId is stable across re-exports regardless of row position (content-based, not index-based)', () => {
+  const row = { Symbol: 'LINK', Type: 'Buy', Quantity: 5, Price: 10, Date: '2026-05-01T00:00:00Z' };
+  const [firstPosition] = parseRevolutRows([row, { Symbol: 'BTC', Type: 'Buy', Quantity: 1, Price: 50000, Date: '2026-05-02T00:00:00Z' }], 1.0);
+  const [, secondPosition] = parseRevolutRows([{ Symbol: 'BTC', Type: 'Buy', Quantity: 1, Price: 50000, Date: '2026-05-02T00:00:00Z' }, row], 1.0);
+  assert.equal(firstPosition.sourceId, secondPosition.sourceId);
+});
+
+test('parseRevolutRows: rejects a row with no usable numeric price rather than fabricating one', () => {
+  const rows = [{ Symbol: 'ETH', Type: 'Buy', Quantity: '0.001', Price: 'n/a', Date: '2026-04-10T00:00:00Z' }];
+  assert.deepEqual(parseRevolutRows(rows, 1.1), []);
+});
+
 test('parseRevolutRows: skips non-tracked symbols', () => {
   const rows = [{ Symbol: 'DOGE', Type: 'Buy', Quantity: 100, Price: 0.1, Date: '2026-04-10T00:00:00Z' }];
+  assert.deepEqual(parseRevolutRows(rows, 1.1), []);
+});
+
+test('parseRevolutRows: "Buy - Revolut X" is a real purchase, not a type to drop', () => {
+  const rows = [{ Symbol: 'LINK', Type: 'Buy - Revolut X', Quantity: '2.057306', Price: '$7.75', Date: 'Jul 2, 2026, 6:32:44\u00e2\u0080\u00afPM' }];
+  const [tx] = parseRevolutRows(rows, 1.0);
+  assert.equal(tx.type, 'BUY');
+  assert.equal(tx.unitPriceUsd, 7.75);
+});
+
+test('parseRevolutRows: "Staking reward" is a real quantity increase with an honest $0 cost basis, not fabricated FMV', () => {
+  const rows = [{ Symbol: 'ETH', Type: 'Staking reward', Quantity: '0.00000402', Price: '', Date: 'Jul 22, 2026, 9:41:17\u00e2\u0080\u00afAM' }];
+  const [tx] = parseRevolutRows(rows, 1.1);
+  assert.equal(tx.type, 'TRANSFER_IN');
+  assert.equal(tx.unitPriceUsd, 0);
+  assert.match(tx.priceApproximation, /does not report a price/);
+});
+
+test('parseRevolutRows: "Stake" is excluded — moves an existing balance, not a new acquisition', () => {
+  const rows = [{ Symbol: 'ETH', Type: 'Stake', Quantity: '0.01819434', Price: '\u00e2\u00ac1,654.64', Date: 'Jul 19, 2026, 2:22:47\u00e2\u0080\u00afPM' }];
   assert.deepEqual(parseRevolutRows(rows, 1.1), []);
 });
 

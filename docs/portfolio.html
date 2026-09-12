@@ -44,9 +44,9 @@
         <input id="neverlessInput" type="file" accept=".csv" class="hidden">
       </label>
       <label class="border border-dashed border-border rounded-lg p-3 text-center cursor-pointer hover-bg-surface">
-        <span class="text-sm block">Revolut XLSX</span>
+        <span class="text-sm block">Revolut CSV/XLSX</span>
         <span class="text-xs text-faint block mt-1">Symbol/Type/Quantity/Price export</span>
-        <input id="revolutInput" type="file" accept=".xlsx" class="hidden">
+        <input id="revolutInput" type="file" accept=".csv,.xlsx" class="hidden">
       </label>
     </div>
     <p id="uploadStatus" class="text-xs text-faint mt-3"></p>
@@ -112,7 +112,18 @@ async function handleNeverlessFile(file) {
 }
 
 async function handleRevolutFile(file) {
-  document.getElementById('uploadStatus').textContent = 'Parsing XLSX…';
+  const isCsv = /\.csv$/i.test(file.name);
+  document.getElementById('uploadStatus').textContent = `Parsing ${isCsv ? 'CSV' : 'XLSX'}…`;
+
+  if (isCsv) {
+    Papa.parse(file, {
+      header: true, skipEmptyLines: true,
+      complete: async (results) => { await submitImport('revolut_xlsx', results.data); },
+      error: (err) => { document.getElementById('uploadStatus').textContent = `Parse error: ${err.message}`; },
+    });
+    return;
+  }
+
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf, { type: 'array', cellDates: true });
   const sheet = wb.Sheets[wb.SheetNames[0]];

@@ -60,43 +60,86 @@ export function parseNeverlessCSV(rows) {
   return out;
 }
 
+/** Extracts a plain number from a currency-formatted string, robust to corrupted/mangled
+ * currency symbols (seen in practice: Revolut's CSV export double-encodes the € sign) and
+ * thousands separators. Returns NaN rather than guessing if nothing numeric is present. */
+function parseMoneyString(raw) {
+  if (raw == null) return NaN;
+  if (typeof raw === 'number') return raw;
+  const cleaned = String(raw).replace(/[^0-9.-]/g, '');
+  return cleaned === '' || cleaned === '-' ? NaN : parseFloat(cleaned);
+}
+
+/** Parses a human-readable date string, tolerant of non-ASCII whitespace corruption
+ * (seen in practice: a mangled narrow-no-break-space between time and AM/PM). */
+function parseFlexibleDate(raw) {
+  if (raw instanceof Date) return raw.getTime();
+  const cleaned = String(raw).replace(/[^\x20-\x7E]/g, ' ').replace(/\s+/g, ' ').trim();
+  return Date.parse(cleaned);
+}
+
+/** Classifies a Revolut row's Type into what it actually means for holdings.
+ * Real-world exports include variants beyond plain Buy/Sell:
+ *   'Buy - Revolut X' -> BUY (a real purchase through a different order venue)
+ *   'Staking reward'  -> TRANSFER_IN (a real quantity increase; Revolut leaves
+ *                        Price blank for these, so cost basis is $0 rather
+ *                        than a fabricated fair-market-value estimate)
+ *   'Receive', 'Other' -> in practice only ever seen against fiat (EUR/USD),
+ *                        which the tracked-asset filter already excludes
+ *   'Stake'            -> excluded: moves an *existing* balance into staking,
+ *                        not a new acquisition (confirmed against real data:
+ *                        the staked quantity exactly matched the prior BUY
+ *                        total for that asset — counting it too would double it)
+ */
+function classifyRevolutType(rawType) {
+  const t = String(rawType || '').toUpperCase();
+  if (t.startsWith('BUY')) return 'BUY';
+  if (t.startsWith('SELL')) return 'SELL';
+  if (t === 'STAKING REWARD') return 'TRANSFER_IN';
+  return null;
+}
+
 /**
- * Parses rows from a Revolut-style export (Symbol, Type, Quantity, Price,
- * Value, Fees, Date). Price/Value are in the statement's native currency,
- * which for this export is EUR (verified against V1's txs_backup, which
- * stores the same transactions with both eur and usd fields). Since this
- * parser has no historical FX source, `eurUsdRate` is an explicit, injected
- * approximation — never silently assumed inside the function.
- *
- * @param rows        array of row objects
- * @param eurUsdRate  EUR->USD rate to apply; caller decides freshness/source
+ * Parses rows from a Revolut export — CSV or XLSX, both seen in practice. Handles two
+ * distinct real-world shapes for Price/Value/Fees and Date:
+ *   - raw numbers / Date objects (some XLSX exports)
+ *   - currency-formatted strings with corrupted symbols, and human-readable dates
+ *     with corrupted whitespace (the CSV export format actually encountered)
+ * `eurUsdRate` is an explicit, injected approximation — see note above on parseNeverlessCSV's
+ * design philosophy; this function never assumes a rate itself.
  */
 export function parseRevolutRows(rows, eurUsdRate) {
   const tracked = new Set(TRACKED_ASSETS);
   const out = [];
 
-  rows.forEach((row, i) => {
+  rows.forEach((row) => {
     const asset = row['Symbol'];
     if (!tracked.has(asset)) return;
-    const type = String(row['Type'] || '').toUpperCase();
-    if (type !== 'BUY' && type !== 'SELL') return;
+    const type = classifyRevolutType(row['Type']);
+    if (!type) return;
 
-    const qty = Number(row['Quantity']);
-    const priceEur = Number(row['Price']);
-    const dateVal = row['Date'];
-    const ts = dateVal instanceof Date ? dateVal.getTime() : Date.parse(dateVal);
+    const qty = parseMoneyString(row['Quantity']);
+    const ts = parseFlexibleDate(row['Date']);
+    if (!(qty > 0) || Number.isNaN(ts)) return;
 
-    if (!(qty > 0) || !Number.isFinite(priceEur) || Number.isNaN(ts)) return;
+    // Staking rewards genuinely have no price in this export — $0 cost basis
+    // reflects that honestly rather than fabricating a fair-market-value estimate.
+    const priceEur = type === 'TRANSFER_IN' ? (parseMoneyString(row['Price']) || 0) : parseMoneyString(row['Price']);
+    if (type !== 'TRANSFER_IN' && !Number.isFinite(priceEur)) return;
 
     out.push({
-      sourceId: `rev_${asset}_${ts}_${i}`,
+      // Content-based, not position-based: stable across re-exports that add/reorder
+      // rows, unlike an array-index suffix would be.
+      sourceId: `rev_${asset}_${ts}_${qty}_${priceEur}`,
       asset, account: 'Revolut',
-      type: type === 'BUY' ? 'BUY' : 'SELL',
+      type,
       quantity: qty,
       unitPriceUsd: priceEur * eurUsdRate,
       timestamp: ts,
-      source: 'XLSX_REVOLUT',
-      priceApproximation: 'EUR->USD converted using a single supplied rate, not historical FX at time of purchase',
+      source: 'REVOLUT',
+      priceApproximation: type === 'TRANSFER_IN'
+        ? 'Staking reward — Revolut does not report a price for these, so cost basis is $0, not an estimated fair-market-value'
+        : 'EUR->USD converted using a single supplied rate, not historical FX at time of purchase',
     });
   });
 
