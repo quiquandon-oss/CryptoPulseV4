@@ -20,6 +20,7 @@ import { classifyFreshness } from '../engine/freshness.js';
 import { explainSignal } from '../engine/explain.js';
 import { fetchAllCandles } from './data-source.js';
 import * as db from './db.js';
+import * as portfolio from './portfolio.js';
 
 const INTERVAL = '1h';
 const LOOKBACK_MS = 60 * 24 * 3_600_000; // 60 days of hourly candles — covers Ichimoku's 52-period span
@@ -77,6 +78,17 @@ export async function runIngestCycle(env, now = Date.now()) {
 
   await resolveDueOutcomes(env, now);
   await refreshPerformanceMetrics(env);
+
+  // Portfolio value history needs regular snapshots to be meaningful, not just
+  // one at import time. Skip quietly if nothing's been imported yet.
+  const hasPortfolioData = await env.DB.prepare('SELECT 1 FROM portfolio_transactions LIMIT 1').first();
+  if (hasPortfolioData) {
+    try {
+      await portfolio.computeAndStoreSnapshot(env, now);
+    } catch (err) {
+      await db.upsertHealth(env.DB, 'portfolio_snapshot', 'portfolio_snapshot', 'ERROR', String(err), null);
+    }
+  }
   await db.upsertHealth(env.DB, 'database', 'database', 'OK', null, new Date(now).toISOString());
 
   return summary;
