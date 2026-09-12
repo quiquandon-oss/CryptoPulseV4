@@ -7,31 +7,24 @@ import { TRACKED_ASSETS, computeHoldings, computePortfolioSummary, dedupeTransac
 import { fetchCandles } from './data-source.js';
 
 /**
- * Current prices for all 5 tracked portfolio assets. BTC/ETH/LINK reuse the
- * price the signal engine already computed this cycle (technical_indicators)
- * rather than re-fetching. SOL/HYPE aren't part of the V4 signal engine
- * (spec section 4 scopes that to BTC/ETH/LINK), so they get a small, direct
- * Hyperliquid fetch here — for portfolio valuation only, not signal generation.
+ * Current prices for all 5 tracked portfolio assets, fetched live on every
+ * call. Deliberately does NOT reuse technical_indicators' hourly-cached
+ * BTC/ETH/LINK price — that cache is fine for the signal engine (which only
+ * evaluates once per ingest cycle anyway) but was making portfolio value look
+ * stale for up to ~55 minutes at a time, unlike SOL/HYPE which were already
+ * live. All 5 now match.
  */
 export async function getCurrentPrices(env) {
   const prices = {};
 
-  const { results } = await env.DB.prepare(
-    `SELECT ti.asset_id, ti.price FROM technical_indicators ti
-     INNER JOIN (SELECT asset_id AS a2, MAX(ts) AS max_ts FROM technical_indicators GROUP BY asset_id) latest
-       ON ti.asset_id = latest.a2 AND ti.ts = latest.max_ts`,
-  ).all();
-  for (const row of results) prices[row.asset_id] = row.price;
-
-  for (const asset of TRACKED_ASSETS) {
-    if (prices[asset] != null) continue;
+  await Promise.all(TRACKED_ASSETS.map(async (asset) => {
     try {
       const candles = await fetchCandles(asset, '1h', 3 * 3_600_000);
-      if (candles.length) prices[asset] = candles[candles.length - 1].close;
+      prices[asset] = candles.length ? candles[candles.length - 1].close : null;
     } catch {
       prices[asset] = null; // unavailable stays unavailable — never guessed
     }
-  }
+  }));
 
   for (const asset of TRACKED_ASSETS) if (!(asset in prices)) prices[asset] = null;
   return prices;
