@@ -12,6 +12,9 @@
 
 export const TRACKED_ASSETS = Object.freeze(['BTC', 'ETH', 'SOL', 'LINK', 'HYPE']);
 
+// Maximum time distance allowed between a portfolio snapshot and a benchmark observation
+export const MAX_BENCHMARK_TIME_DELTA_MS = 2 * 3600 * 1000; // 2 hours
+
 /**
  * Parses rows from a Neverless-style CSV export.
  */
@@ -84,7 +87,7 @@ function parseRevolutMoneyToUsd(raw, eurUsdRate) {
     return null;
   }
   const val = parseMoneyString(str);
-  return Number.isFinite(val) ? val * eurUsdRate : null;
+  return Number.isFinite(val) && eurUsdRate != null ? val * eurUsdRate : null;
 }
 
 export function parseRevolutRows(rows, eurUsdRate) {
@@ -232,6 +235,7 @@ export function dedupeTransactions(transactions) {
 /**
  * Computes a normalized benchmark comparison (Base = 100) between portfolio snapshots
  * and a benchmark asset (e.g. BTC) over their overlapping verified time range.
+ * Strictly enforces MAX_BENCHMARK_TIME_DELTA_MS timestamp matching tolerance.
  *
  * @param {Array<Object>} portfolioPoints Array of [{ ts, total_value_usd }]
  * @param {Array<Object>} benchmarkPoints Array of [{ ts, close }] (e.g. BTC candles)
@@ -249,18 +253,34 @@ export function computeNormalizedBenchmark(portfolioPoints, benchmarkPoints) {
     };
   }
 
-  const basePort = validPort[0].total_value_usd;
   const startTs = validPort[0].ts;
 
-  // Find benchmark price at or nearest to startTs
-  const btcSorted = [...validBtc].sort((a, b) => Math.abs(a.ts - startTs) - Math.abs(b.ts - startTs));
-  const baseBtc = btcSorted[0].close;
+  // Find benchmark price at startTs within MAX_BENCHMARK_TIME_DELTA_MS
+  const btcSortedForStart = [...validBtc].sort((a, b) => Math.abs(a.ts - startTs) - Math.abs(b.ts - startTs));
+  const nearestStartBtc = btcSortedForStart[0];
+
+  if (!nearestStartBtc || Math.abs(nearestStartBtc.ts - startTs) > MAX_BENCHMARK_TIME_DELTA_MS) {
+    return {
+      status: 'INSUFFICIENT_DATA',
+      message: 'No benchmark observation exists within acceptable time tolerance of portfolio start date.',
+      points: [],
+    };
+  }
+
+  const basePort = validPort[0].total_value_usd;
+  const baseBtc = nearestStartBtc.close;
 
   const points = validPort.map((p) => {
-    // find matching btc point near p.ts
-    const matchBtc = [...validBtc].sort((a, b) => Math.abs(a.ts - p.ts) - Math.abs(b.ts - p.ts))[0];
+    // Find matching benchmark point within MAX_BENCHMARK_TIME_DELTA_MS tolerance
+    const candidates = validBtc
+      .map((b) => ({ ...b, delta: Math.abs(b.ts - p.ts) }))
+      .filter((b) => b.delta <= MAX_BENCHMARK_TIME_DELTA_MS)
+      .sort((a, b) => a.delta - b.delta);
+
+    const matchBtc = candidates[0] ?? null;
     const portNorm = (p.total_value_usd / basePort) * 100;
     const btcNorm = matchBtc ? (matchBtc.close / baseBtc) * 100 : null;
+
     return {
       ts: p.ts,
       portfolioNormalized: Number(portNorm.toFixed(2)),

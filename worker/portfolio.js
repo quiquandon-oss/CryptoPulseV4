@@ -6,14 +6,6 @@
 import { TRACKED_ASSETS, computeHoldings, computePortfolioSummary, dedupeTransactions } from '../engine/portfolio.js';
 import { fetchCandles } from './data-source.js';
 
-/**
- * Current prices for all 5 tracked portfolio assets, fetched live on every
- * call. Deliberately does NOT reuse technical_indicators' hourly-cached
- * BTC/ETH/LINK price — that cache is fine for the signal engine (which only
- * evaluates once per ingest cycle anyway) but was making portfolio value look
- * stale for up to ~55 minutes at a time, unlike SOL/HYPE which were already
- * live. All 5 now match.
- */
 export async function getCurrentPrices(env) {
   const prices = {};
 
@@ -22,7 +14,7 @@ export async function getCurrentPrices(env) {
       const candles = await fetchCandles(asset, '1h', 3 * 3_600_000);
       prices[asset] = candles.length ? candles[candles.length - 1].close : null;
     } catch {
-      prices[asset] = null; // unavailable stays unavailable — never guessed
+      prices[asset] = null;
     }
   }));
 
@@ -56,7 +48,6 @@ export async function getAllTransactions(db) {
   }));
 }
 
-/** Computes the current summary from stored transactions + live prices, and persists a snapshot. */
 export async function computeAndStoreSnapshot(env, now = Date.now()) {
   const transactions = await getAllTransactions(env.DB);
   const holdings = computeHoldings(transactions);
@@ -91,5 +82,21 @@ export async function getDataHealth(db) {
   const txRange = await db.prepare('SELECT MIN(transaction_timestamp) as earliest, MAX(transaction_timestamp) as latest, COUNT(*) as n FROM portfolio_transactions').first();
   const snapRange = await db.prepare('SELECT MIN(ts) as earliest, MAX(ts) as latest, COUNT(*) as n FROM portfolio_snapshots').first();
   const { results: bySource } = await db.prepare('SELECT source, COUNT(*) as n, MIN(transaction_timestamp) as earliest, MAX(transaction_timestamp) as latest FROM portfolio_transactions GROUP BY source').all();
-  return { transactions: txRange, snapshots: snapRange, bySource };
+
+  let importLogs = { conflictCount: 0, duplicateCount: 0, insertedCount: 0, receivedCount: 0 };
+  try {
+    const logSummary = await db.prepare('SELECT SUM(conflict_count) as conflicts, SUM(duplicate_count) as duplicates, SUM(inserted_count) as inserted, SUM(received_count) as received FROM historical_import_logs').first();
+    if (logSummary) {
+      importLogs = {
+        conflictCount: logSummary.conflicts ?? 0,
+        duplicateCount: logSummary.duplicates ?? 0,
+        insertedCount: logSummary.inserted ?? 0,
+        receivedCount: logSummary.received ?? 0,
+      };
+    }
+  } catch {
+    // Table may be empty or newly created
+  }
+
+  return { transactions: txRange, snapshots: snapRange, bySource, importLogs };
 }

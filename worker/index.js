@@ -228,8 +228,11 @@ async function handlePortfolioImport(request, env) {
   if (format === 'neverless_csv') {
     transactions = parseNeverlessCSV(rows);
   } else if (format === 'revolut_xlsx') {
-    const rate = Number(body.eurUsdRate) || 1.10;
-    transactions = parseRevolutRows(rows, rate);
+    const rawRate = Number(body.eurUsdRate);
+    if (!body.eurUsdRate || !Number.isFinite(rawRate) || rawRate <= 0) {
+      return json({ error: 'Explicit valid eurUsdRate is required for Revolut EUR statement import' }, 400);
+    }
+    transactions = parseRevolutRows(rows, rawRate);
   } else if (format === 'v1_export') {
     transactions = parseV1Export(rows);
   } else {

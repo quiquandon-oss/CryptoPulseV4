@@ -116,8 +116,6 @@
 <script>
 renderNav('portfolio.html');
 
-const EUR_USD_RATE = 1.10;
-
 async function handleNeverlessFile(file) {
   document.getElementById('uploadStatus').textContent = 'Parsing CSV…';
   Papa.parse(file, {
@@ -128,13 +126,24 @@ async function handleNeverlessFile(file) {
 }
 
 async function handleRevolutFile(file) {
+  const rateStr = prompt("Revolut statement contains EUR transactions. Enter verified EUR/USD conversion rate (e.g. 1.08):");
+  if (!rateStr) {
+    document.getElementById('uploadStatus').textContent = 'Import cancelled — Revolut EUR statements require an explicit verified EUR/USD rate.';
+    return;
+  }
+  const eurUsdRate = parseFloat(rateStr);
+  if (!Number.isFinite(eurUsdRate) || eurUsdRate <= 0) {
+    document.getElementById('uploadStatus').textContent = 'Invalid EUR/USD rate entered.';
+    return;
+  }
+
   const isCsv = /\.csv$/i.test(file.name);
   document.getElementById('uploadStatus').textContent = `Parsing ${isCsv ? 'CSV' : 'XLSX'}…`;
 
   if (isCsv) {
     Papa.parse(file, {
       header: true, skipEmptyLines: true,
-      complete: async (results) => { await submitImport('revolut_xlsx', results.data); },
+      complete: async (results) => { await submitImport('revolut_xlsx', results.data, eurUsdRate); },
       error: (err) => { document.getElementById('uploadStatus').textContent = `Parse error: ${err.message}`; },
     });
     return;
@@ -145,10 +154,10 @@ async function handleRevolutFile(file) {
   const sheet = wb.Sheets[wb.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json(sheet, { raw: false, dateNF: 'yyyy-mm-dd"T"hh:mm:ss' });
   const normalized = rows.map((r) => ({ ...r, Date: r.Date instanceof Date ? r.Date.toISOString() : r.Date }));
-  await submitImport('revolut_xlsx', normalized);
+  await submitImport('revolut_xlsx', normalized, eurUsdRate);
 }
 
-async function submitImport(format, rows) {
+async function submitImport(format, rows, eurUsdRate = null) {
   let token = localStorage.getItem('v4-import-token');
   if (!token) {
     token = prompt('Enter the portfolio import token (same as the Worker\'s INGEST_TOKEN).');
@@ -158,9 +167,12 @@ async function submitImport(format, rows) {
 
   document.getElementById('uploadStatus').textContent = `Uploading ${rows.length} rows…`;
   try {
+    const payload = { format, rows };
+    if (eurUsdRate != null) payload.eurUsdRate = eurUsdRate;
+
     const res = await fetch(`${window.V4_API_BASE}/api/portfolio/import`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ format, rows, eurUsdRate: EUR_USD_RATE }),
+      body: JSON.stringify(payload),
     });
     const data = await res.json();
     if (res.status === 401) {
@@ -233,7 +245,6 @@ async function loadHoldings() {
     const { assets } = await v4Fetch('/api/portfolio/assets');
     if (!assets || !assets.length) { el.innerHTML = '<div class="px-4 py-6 text-sm font-mono text-faint">No position holdings found.</div>'; return; }
 
-    // Also render Visualization 4 (Asset Performance comparison)
     renderAssetPerformanceChart(document.getElementById('assetPerfChart'), assets);
 
     el.innerHTML = `<table class="w-full text-xs font-mono min-w-[500px]">

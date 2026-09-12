@@ -38,22 +38,26 @@
   <!-- Historical Recovery & Data Integrity Summary -->
   <section class="mb-6 bg-surface border border-border rounded-lg p-4">
     <h2 class="text-xs font-mono text-faint uppercase tracking-wider mb-3">Historical Data Recovery &amp; Integrity Audit</h2>
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono text-xs mb-3">
+    <div id="auditMetrics" class="grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono text-xs mb-3">
       <div class="bg-elevated p-3 rounded border border-border">
-        <span class="text-faint text-[10px] uppercase block">Existing V4 Baseline</span>
-        <span class="text-sm font-semibold text-up">PRESERVED</span>
+        <span class="text-faint text-[10px] uppercase block">Recorded Txs</span>
+        <span id="auditTxCount" class="text-sm font-semibold text-accent">Loading...</span>
       </div>
       <div class="bg-elevated p-3 rounded border border-border">
-        <span class="text-faint text-[10px] uppercase block">Duplicate Protection</span>
-        <span class="text-sm font-semibold text-accent">IDEMPOTENT</span>
+        <span class="text-faint text-[10px] uppercase block">Recorded Snapshots</span>
+        <span id="auditSnapCount" class="text-sm font-semibold text-accent">Loading...</span>
       </div>
       <div class="bg-elevated p-3 rounded border border-border">
-        <span class="text-faint text-[10px] uppercase block">Conflict Logging</span>
-        <span class="text-sm font-semibold text-warn">0 DISCREPANCIES</span>
+        <span class="text-faint text-[10px] uppercase block">Import Sources</span>
+        <span id="auditSourceCount" class="text-sm font-semibold text-up">Loading...</span>
+      </div>
+      <div class="bg-elevated p-3 rounded border border-border">
+        <span class="text-faint text-[10px] uppercase block">Discrepancies</span>
+        <span id="auditConflictCount" class="text-sm font-semibold text-up">Loading...</span>
       </div>
     </div>
-    <p class="text-xs font-mono text-faint">
-      Historical candle recovery from Hyperliquid preserves authoritative V4 D1 observations. Pre-April 2026 portfolio periods explicitly display <span class="text-warn">INSUFFICIENT_DATA</span> per non-negotiable data integrity rules.
+    <p id="auditDetailsText" class="text-xs font-mono text-faint">
+      Fetching real database telemetry...
     </p>
   </section>
 
@@ -91,6 +95,30 @@ function fieldRow(label, value) {
     <span class="text-faint shrink-0">${escapeHtml(label)}</span>
     <span class="text-right font-medium text-ink break-all">${value}</span>
   </div>`;
+}
+
+async function loadAuditTelemetry() {
+  try {
+    const health = await v4Fetch('/api/portfolio/data-health');
+    document.getElementById('auditTxCount').textContent = health.transactions?.n ?? 0;
+    document.getElementById('auditSnapCount').textContent = health.snapshots?.n ?? 0;
+    document.getElementById('auditSourceCount').textContent = `${health.bySource?.length ?? 0} Active`;
+
+    const conflictCount = health.importLogs?.conflictCount ?? 0;
+    document.getElementById('auditConflictCount').textContent = `${conflictCount} Discrepancies`;
+    document.getElementById('auditConflictCount').className = `text-sm font-semibold ${conflictCount > 0 ? 'text-warn' : 'text-up'}`;
+
+    if (health.transactions?.earliest) {
+      const earliest = new Date(health.transactions.earliest).toLocaleDateString();
+      const latest = new Date(health.transactions.latest).toLocaleDateString();
+      document.getElementById('auditDetailsText').textContent =
+        `Verified portfolio data spans ${earliest} to ${latest} across ${health.bySource.map(s => s.source).join(', ')}. Database import logs record ${conflictCount} OHLCV reconciliation discrepancy conflict(s).`;
+    } else {
+      document.getElementById('auditDetailsText').textContent = 'No portfolio transactions currently present in D1.';
+    }
+  } catch (err) {
+    document.getElementById('auditDetailsText').textContent = `Could not query audit telemetry: ${err.message}`;
+  }
 }
 
 async function loadList() {
@@ -177,6 +205,7 @@ document.getElementById('backToList').addEventListener('click', () => {
   listView.classList.remove('hidden');
 });
 
+loadAuditTelemetry();
 loadList();
 </script>
 </body>
