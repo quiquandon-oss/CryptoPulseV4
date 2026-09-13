@@ -97,6 +97,7 @@ export async function runIngestCycle(env, now = Date.now()) {
   // blocks the rest of ingest if either step fails.
   try {
     await marketPulse.importV1History(env);
+    await marketPulse.backfillMarketPulseFromV1History(env);
     await marketPulse.computeAndStoreMarketPulse(env, now);
   } catch (err) {
     await db.upsertHealth(env.DB, 'market_pulse', 'market_pulse', 'ERROR', String(err), null);

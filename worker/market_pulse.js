@@ -92,6 +92,42 @@ export async function computeAndStoreMarketPulse(env, now = Date.now()) {
   return { ...result, v1DataAgeMs: latestV1 ? now - latestV1.ts : null };
 }
 
+/**
+ * Backfills market_pulse_snapshots for every already-imported V1 history row
+ * that doesn't have one yet, using ONLY the disclosed half — V4's own regime
+ * classification only goes back ~hours, not the ~32 days V1's history covers,
+ * so there is no honest way to compute a deterministic half for those older
+ * timestamps. Each backfilled row is correctly marked partial=true with the
+ * reason stated, per the spec's "do not fabricate the missing half" rule.
+ * Idempotent: skips any V1 timestamp that already has a snapshot.
+ */
+export async function backfillMarketPulseFromV1History(env) {
+  const v1Rows = await env.DB.prepare('SELECT ts, score, regime_mag FROM imported_v1_history ORDER BY ts ASC').all();
+  const existing = await env.DB.prepare('SELECT ts FROM market_pulse_snapshots').all();
+  const existingTs = new Set((existing.results || []).map((r) => r.ts));
+
+  const toCompute = (v1Rows.results || []).filter((r) => !existingTs.has(r.ts));
+  if (!toCompute.length) return { backfilled: 0 };
+
+  const stmt = env.DB.prepare(
+    `INSERT OR IGNORE INTO market_pulse_snapshots
+     (id, ts, market_pulse, label, partial, partial_reason, deterministic_half, disclosed_half,
+      v4_regime_norm, v4_cycle_position_norm, sentiment_norm, cycle_conviction_norm, disclosure)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+  );
+  const binds = toCompute.map((row) => {
+    const result = computeMarketPulse({ sentimentScore0to100: row.score, cycleConvictionNeg1to1: row.regime_mag });
+    return stmt.bind(
+      `v1backfill_${row.ts}`, row.ts, result.marketPulse, result.label, 1,
+      'Historical reading — V4 regime classification does not extend this far back; reflects V1\u2019s disclosed Sentiment/Cycle data only.',
+      null, result.disclosedHalf, null, null, result.components?.sentimentNorm ?? null, result.components?.cycleConvictionNeg1to1 ?? null,
+      result.disclosure,
+    );
+  });
+  await env.DB.batch(binds);
+  return { backfilled: binds.length };
+}
+
 export async function getMarketPulseHistory(db, sinceTs) {
   const { results } = await db.prepare(
     'SELECT * FROM market_pulse_snapshots WHERE ts >= ? ORDER BY ts ASC',

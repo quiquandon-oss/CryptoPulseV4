@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   computeAggregatedRegime, computeCyclePosition, computeHalvingPhase, computeMarketPulse,
-  reconcileV1HistoryImport, CYCLE_ATH, HALVING_DATE_MS,
+  reconcileV1HistoryImport, classifyAlignment, explainMarketPulse, CYCLE_ATH, HALVING_DATE_MS,
 } from '../engine/market_pulse.js';
 
 // --- computeAggregatedRegime ---
@@ -147,4 +147,63 @@ test('reconcileV1HistoryImport: a candidate row with no score is skipped rather 
   const { toInsert, receivedCount } = reconcileV1HistoryImport([], [{ ts: 1000, score: null }]);
   assert.equal(toInsert.length, 0);
   assert.equal(receivedCount, 1);
+});
+
+// --- classifyAlignment ---
+
+test('classifyAlignment: both rising together is Confirmation, in neutral analytical language', () => {
+  const r = classifyAlignment(10, 15);
+  assert.equal(r.label, 'Confirmation');
+});
+
+test('classifyAlignment: both falling together is also Confirmation', () => {
+  const r = classifyAlignment(-10, -15);
+  assert.equal(r.label, 'Confirmation');
+});
+
+test('classifyAlignment: Pulse up while BTC flat/down is Bullish divergence', () => {
+  const r = classifyAlignment(8, -2);
+  assert.equal(r.label, 'Bullish divergence');
+});
+
+test('classifyAlignment: Pulse down while BTC flat/up is Bearish divergence', () => {
+  const r = classifyAlignment(-8, 2);
+  assert.equal(r.label, 'Bearish divergence');
+});
+
+test('classifyAlignment: never returns a label containing trading-signal language', () => {
+  const labels = [
+    classifyAlignment(10, 15), classifyAlignment(-10, -15),
+    classifyAlignment(8, -2), classifyAlignment(-8, 2), classifyAlignment(0, 0),
+  ].map((r) => r.label.toLowerCase());
+  for (const l of labels) {
+    assert.ok(!l.includes('buy') && !l.includes('sell') && !l.includes('signal'));
+  }
+});
+
+test('classifyAlignment: missing inputs return null rather than a fabricated relationship', () => {
+  assert.equal(classifyAlignment(null, 5), null);
+  assert.equal(classifyAlignment(5, undefined), null);
+});
+
+// --- explainMarketPulse ---
+
+test('explainMarketPulse: insufficient-evidence result produces the exact reason with no invented points', () => {
+  const r = computeMarketPulse({});
+  const e = explainMarketPulse(r);
+  assert.equal(e.summary, 'Insufficient evidence to determine the current Market Pulse.');
+  assert.deepEqual(e.points, []);
+});
+
+test('explainMarketPulse: only cites facts actually supplied in context, never invents a cause', () => {
+  const r = computeMarketPulse({ v4RegimeNorm: 0.5, sentimentScore0to100: 60 });
+  const e = explainMarketPulse(r, { regimeCounts: { bullishCount: 2, bearishCount: 0, total: 3 } });
+  assert.ok(e.points.some((p) => p.includes('2 of 3')));
+  assert.ok(!e.points.some((p) => p.includes('halving')), 'should not mention halving when no halving context was given');
+});
+
+test('explainMarketPulse: a partial result includes the stated partial reason among its points', () => {
+  const r = computeMarketPulse({ sentimentScore0to100: 70 });
+  const e = explainMarketPulse(r);
+  assert.ok(e.points.includes(r.partialReason));
 });

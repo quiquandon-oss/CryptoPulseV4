@@ -121,6 +121,62 @@ export function computeMarketPulse(inputs = {}) {
 }
 
 /**
+ * Classifies the Pulse/BTC relationship using neutral analytical language
+ * (spec: never call this a trading signal). Compares each series' own
+ * direction over the same window — never blends them onto one scale.
+ * @param marketPulseChange e.g. latest.marketPulse - earliest.marketPulse over the window
+ * @param btcReturnPct      BTC's cumulative % return over the same window
+ */
+export function classifyAlignment(marketPulseChange, btcReturnPct) {
+  if (marketPulseChange == null || btcReturnPct == null) return null;
+  const pulseUp = marketPulseChange > 1;
+  const pulseDown = marketPulseChange < -1;
+  const btcUp = btcReturnPct > 1;
+  const btcDown = btcReturnPct < -1;
+
+  if (pulseUp && btcUp) return { label: 'Confirmation', detail: 'Market Pulse and BTC are both rising together.' };
+  if (pulseDown && btcDown) return { label: 'Confirmation', detail: 'Market Pulse and BTC are both falling together.' };
+  if (pulseUp && !btcUp) return { label: 'Bullish divergence', detail: 'Market Pulse is improving while BTC is flat or down.' };
+  if (pulseDown && !btcDown) return { label: 'Bearish divergence', detail: 'Market Pulse is weakening while BTC is flat or up.' };
+  return { label: 'Market alignment', detail: 'No strong divergence — both readings are relatively flat over this period.' };
+}
+
+/**
+ * Deterministic "Why this reading?" text, built only from the structured
+ * components already computed — never an invented narrative. Mirrors
+ * engine/explain.js's buildDeterministicExplanation pattern (template over
+ * facts, not a model call) for the same reason: auditable, reproducible.
+ */
+export function explainMarketPulse(result, context = {}) {
+  if (result.marketPulse == null) {
+    return { summary: result.reason || 'Insufficient evidence to determine the current Market Pulse.', points: [] };
+  }
+  const points = [];
+  const { regimeCounts, cycleDrawdownPct, halvingPhase } = context;
+
+  if (regimeCounts) {
+    points.push(`${regimeCounts.bullishCount} of ${regimeCounts.total} tracked assets (BTC/ETH/LINK) are in a bullish technical regime, ${regimeCounts.bearishCount} bearish.`);
+  }
+  if (cycleDrawdownPct != null) {
+    points.push(`BTC is ${Math.abs(cycleDrawdownPct).toFixed(1)}% below this cycle's ATH.`);
+  }
+  if (halvingPhase) {
+    points.push(`${context.daysSinceHalving} days since the last halving (${halvingPhase.replaceAll('_', ' ').toLowerCase()}).`);
+  }
+  if (result.components?.sentimentNorm != null) {
+    points.push(`V1's imported Sentiment reading contributes ${result.components.sentimentNorm >= 0 ? 'positively' : 'negatively'} to the disclosed half.`);
+  }
+  if (result.partial) {
+    points.push(result.partialReason);
+  }
+
+  return {
+    summary: `Market Pulse is ${result.marketPulse} (${result.label}), based on ${result.partial ? 'partial' : 'complete'} evidence across ${result.partial ? '1' : '2'} of 2 halves.`,
+    points,
+  };
+}
+
+/**
  * Reconciliation for importing V1's `history` rows into V4's own D1 — mirrors
  * engine/historical_import.js's non-destructive pattern (existing V4 records
  * always win on conflict, exact duplicates skipped, only genuinely new rows

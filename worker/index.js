@@ -18,6 +18,8 @@ import {
 } from '../engine/portfolio.js';
 import * as portfolio from './portfolio.js';
 import * as marketPulse from './market_pulse.js';
+import { computeAggregatedRegime, computeCyclePosition, computeHalvingPhase, explainMarketPulse, classifyAlignment } from '../engine/market_pulse.js';
+import { fetchCandles } from './data-source.js';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -292,12 +294,13 @@ async function handleMarketPulseCurrent(env) {
   if (!latest) {
     return json({ marketPulse: null, label: null, reason: 'Insufficient evidence to determine the current Market Pulse.' });
   }
-  return json({
-    ts: latest.ts,
+
+  const result = {
     marketPulse: latest.market_pulse,
     label: latest.label,
     partial: !!latest.partial,
     partialReason: latest.partial_reason,
+    reason: latest.partial_reason,
     deterministicHalf: latest.deterministic_half,
     disclosedHalf: latest.disclosed_half,
     components: {
@@ -307,6 +310,60 @@ async function handleMarketPulseCurrent(env) {
       cycleConvictionNeg1to1: latest.cycle_conviction_norm,
     },
     disclosure: latest.disclosure,
+  };
+
+  // Per-asset latest regime + raw volatility, for the Market Drivers cards.
+  const regimeRows = await env.DB.prepare(
+    `SELECT r.asset_id AS asset, r.regime, ti.volatility20 FROM market_regimes r
+     INNER JOIN (SELECT asset_id, MAX(ts) as maxTs FROM market_regimes GROUP BY asset_id) latest2
+       ON r.asset_id = latest2.asset_id AND r.ts = latest2.maxTs
+     LEFT JOIN technical_indicators ti ON ti.asset_id = r.asset_id AND ti.ts = r.ts`,
+  ).all();
+  const perAsset = regimeRows.results || [];
+  const regimeCounts = computeAggregatedRegime(perAsset.map((r) => ({ asset: r.asset, regime: r.regime })));
+  const highVolAssets = perAsset.filter((r) => r.regime === 'HIGH_VOLATILITY').map((r) => r.asset);
+  const uncertainAssets = perAsset.filter((r) => r.regime === 'TRANSITION' || r.regime === 'HIGH_VOLATILITY').map((r) => r.asset);
+
+  const halving = computeHalvingPhase(latest.ts);
+  let btcPrice = null, cyclePosition = null;
+  try {
+    const btcCandles = await fetchCandles('BTC', '1h', 3 * 3_600_000);
+    btcPrice = btcCandles.length ? btcCandles[btcCandles.length - 1].close : null;
+    cyclePosition = computeCyclePosition(btcPrice);
+  } catch { /* leave null — never fabricate a price */ }
+
+  const explanation = explainMarketPulse(result, {
+    regimeCounts,
+    cycleDrawdownPct: cyclePosition?.drawdownPct,
+    halvingPhase: halving.phase,
+    daysSinceHalving: halving.daysSinceHalving,
+  });
+
+  // Alignment: Market Pulse change vs. BTC return over the same recent window (7d).
+  const sevenDaysAgo = latest.ts - 7 * 86_400_000;
+  const pulseWeekAgo = await env.DB.prepare('SELECT market_pulse FROM market_pulse_snapshots WHERE ts <= ? ORDER BY ts DESC LIMIT 1').bind(sevenDaysAgo).first();
+  const btcWeekAgo = await env.DB.prepare('SELECT close FROM market_observations WHERE asset_id = ? AND ts <= ? ORDER BY ts DESC LIMIT 1').bind('BTC', sevenDaysAgo).first();
+  let alignment = null;
+  if (pulseWeekAgo?.market_pulse != null && btcWeekAgo?.close != null && btcPrice != null) {
+    const pulseChange = latest.market_pulse - pulseWeekAgo.market_pulse;
+    const btcReturnPct = ((btcPrice - btcWeekAgo.close) / btcWeekAgo.close) * 100;
+    alignment = { ...classifyAlignment(pulseChange, btcReturnPct), pulseChange, btcReturnPct };
+  }
+
+  return json({
+    ts: latest.ts,
+    ...result,
+    drivers: {
+      cycle: { phase: halving.phase, daysSinceHalving: halving.daysSinceHalving, drawdownFromAthPct: cyclePosition?.drawdownPct ?? null },
+      sentiment: { v1Score0to100: latest.sentiment_norm != null ? latest.sentiment_norm * 50 + 50 : null, disclosed: true },
+      trend: regimeCounts ? { bullishCount: regimeCounts.bullishCount, bearishCount: regimeCounts.bearishCount, total: regimeCounts.total } : null,
+      volatility: { highVolatilityAssets: highVolAssets, total: perAsset.length },
+      risk: { level: uncertainAssets.length >= 2 ? 'ELEVATED' : 'NORMAL', basis: 'Count of tracked assets in TRANSITION or HIGH_VOLATILITY regime — reflects classification uncertainty, not a financial risk score.', assets: uncertainAssets },
+    },
+    perAssetRegime: perAsset,
+    btcPrice,
+    alignment,
+    explanation,
   });
 }
 
