@@ -414,13 +414,16 @@ async function handlePortfolioHistory(env, url) {
 
 async function handlePortfolioBenchmark(env, url) {
   const benchmarkAsset = (url.searchParams.get('benchmark') || 'BTC').toUpperCase();
-  const portPoints = await portfolio.getPortfolioHistory(env.DB, 0);
+  const range = url.searchParams.get('range') || 'ALL';
+  const rangeMs = { '1W': 7, '1M': 30, '3M': 90, '6M': 180, '1Y': 365 }[range];
+  const since = rangeMs ? Date.now() - rangeMs * 86_400_000 : 0;
+  const portPoints = await portfolio.getPortfolioHistory(env.DB, since);
   const { results: btcCandles } = await env.DB
-    .prepare('SELECT ts, close FROM market_observations WHERE asset_id = ? ORDER BY ts ASC')
-    .bind(benchmarkAsset).all();
+    .prepare('SELECT ts, close FROM market_observations WHERE asset_id = ? AND ts >= ? ORDER BY ts ASC')
+    .bind(benchmarkAsset, since).all();
 
   const benchmark = computeNormalizedBenchmark(portPoints, btcCandles);
-  return json({ benchmarkAsset, ...benchmark });
+  return json({ benchmarkAsset, range, ...benchmark });
 }
 
 async function handlePortfolioInsightsEndpoint(env) {

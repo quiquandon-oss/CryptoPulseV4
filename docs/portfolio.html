@@ -119,9 +119,12 @@
 
   <!-- BENCHMARK COMPARISON -->
   <section class="mb-6 bg-surface border border-border rounded-xl p-4 space-y-3">
-    <div class="flex items-center justify-between gap-2">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
       <h2 class="text-xs font-mono font-semibold text-faint uppercase tracking-wider">Portfolio vs. BTC Benchmark (Normalized Base = 100)</h2>
-      <div id="benchmarkChartExpand"></div>
+      <div class="flex items-center gap-2">
+        <div id="benchmarkRangeButtons" class="flex gap-1 overflow-x-auto no-scrollbar"></div>
+        <div id="benchmarkChartExpand"></div>
+      </div>
     </div>
     <div id="benchmarkChart" class="p-1 min-h-[140px]"><div class="chart-skeleton w-full" style="height:180px"></div></div>
   </section>
@@ -157,7 +160,7 @@
 
 </div>
 
-<script src="app.js?v=2026091209"></script>
+<script src="app.js?v=2026091210"></script>
 <script>
 renderNav('portfolio.html');
 
@@ -375,20 +378,34 @@ async function loadValueChart() {
     const { points } = await v4Fetch(`/api/portfolio/history?range=${activeRange}`);
     renderPortfolioValueChart(valEl, points);
     renderCumulativePnlChart(pnlEl, points);
-    addFullscreenButton('valueChartExpand', 'Position Value History', renderPortfolioValueChart, points);
-    addFullscreenButton('pnlChartExpand', 'Cumulative Net P/L', renderCumulativePnlChart, points);
+    addFullscreenButtonWithRange('valueChartExpand', 'Position Value History', ranges, () => activeRange, async (range, el) => {
+      const { points: fsPoints } = await v4Fetch(`/api/portfolio/history?range=${range}`);
+      renderPortfolioValueChart(el, fsPoints);
+    });
+    addFullscreenButtonWithRange('pnlChartExpand', 'Cumulative Net P/L', ranges, () => activeRange, async (range, el) => {
+      const { points: fsPoints } = await v4Fetch(`/api/portfolio/history?range=${range}`);
+      renderCumulativePnlChart(el, fsPoints);
+    });
   } catch (err) {
     renderDataState(valEl, 'ERROR', err.message);
     renderDataState(pnlEl, 'ERROR', err.message);
   }
 }
 
+let benchmarkActiveRange = 'ALL';
+function drawBenchmarkRangeButtons() {
+  renderRangeButtons('benchmarkRangeButtons', ranges, benchmarkActiveRange, (r) => { benchmarkActiveRange = r; drawBenchmarkRangeButtons(); loadBenchmarkChart(); });
+}
+
 async function loadBenchmarkChart() {
   const el = document.getElementById('benchmarkChart');
   try {
-    const data = await v4Fetch('/api/portfolio/benchmark?benchmark=BTC');
+    const data = await v4Fetch(`/api/portfolio/benchmark?benchmark=BTC&range=${benchmarkActiveRange}`);
     renderBenchmarkChart(el, data);
-    addFullscreenButton('benchmarkChartExpand', 'Portfolio vs. BTC Benchmark (Normalized Base = 100)', renderBenchmarkChart, data);
+    addFullscreenButtonWithRange('benchmarkChartExpand', 'Portfolio vs. BTC Benchmark (Normalized Base = 100)', ranges, () => benchmarkActiveRange, async (range, fsEl) => {
+      const fsData = await v4Fetch(`/api/portfolio/benchmark?benchmark=BTC&range=${range}`);
+      renderBenchmarkChart(fsEl, fsData);
+    });
   } catch (err) {
     renderDataState(el, 'ERROR', err.message);
   }
@@ -433,6 +450,7 @@ function loadAll() {
 }
 
 drawRangeButtons();
+drawBenchmarkRangeButtons();
 loadAll();
 </script>
 </body>

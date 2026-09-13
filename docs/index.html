@@ -120,7 +120,7 @@
   </footer>
 </div>
 
-<script src="app.js?v=2026091209"></script>
+<script src="app.js?v=2026091210"></script>
 <script>
 renderNav('index.html');
 
@@ -139,7 +139,10 @@ async function loadHeroChart() {
     const lastTs = points?.length ? points[points.length - 1].ts : null;
     const isLive = lastTs != null && (Date.now() - lastTs) < 70 * 60_000;
     renderPortfolioValueChart(chartEl, points, { showLivePulse: true, isLive });
-    addFullscreenButton('heroChartExpand', 'Total Portfolio Value', renderPortfolioValueChart, points);
+    addFullscreenButtonWithRange('heroChartExpand', 'Total Portfolio Value', heroRanges, () => heroActiveRange, async (range, el) => {
+      const { points: fsPoints } = await v4Fetch(`/api/portfolio/history?range=${range}`);
+      renderPortfolioValueChart(el, fsPoints);
+    });
   } catch (err) {
     renderDataState(chartEl, 'ERROR', err.message);
   }

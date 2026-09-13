@@ -120,7 +120,7 @@
 
 </div>
 
-<script src="app.js?v=2026091209"></script>
+<script src="app.js?v=2026091210"></script>
 <script>
 renderNav('performance.html');
 
@@ -137,7 +137,10 @@ async function loadPortfolioValueChart() {
   try {
     const { points } = await v4Fetch(`/api/portfolio/history?range=${activeRange}`);
     renderPortfolioValueChart(chartEl, points);
-    addFullscreenButton('perfValueChartExpand', 'Portfolio Value Chart', renderPortfolioValueChart, points);
+    addFullscreenButtonWithRange('perfValueChartExpand', 'Portfolio Value Chart', ranges, () => activeRange, async (range, el) => {
+      const { points: fsPoints } = await v4Fetch(`/api/portfolio/history?range=${range}`);
+      renderPortfolioValueChart(el, fsPoints);
+    });
   } catch (err) {
     renderDataState(chartEl, 'ERROR', err.message);
   }

@@ -117,7 +117,7 @@
 
 </div>
 
-<script src="app.js?v=2026091209"></script>
+<script src="app.js?v=2026091210"></script>
 <script>
 renderNav('asset.html');
 
@@ -234,7 +234,10 @@ renderNav('asset.html');
     try {
       const { points } = await v4Fetch(`/api/assets/${asset}/history?range=${activeRange}`);
       renderPriceSignalChart(chartEl, points, activeRange);
-      addFullscreenButton('chartExpand', `${asset} — Signal Timeline & Price Chart`, renderPriceSignalChart, points, activeRange);
+      addFullscreenButtonWithRange('chartExpand', `${asset} — Signal Timeline & Price Chart`, ranges, () => activeRange, async (range, el) => {
+        const { points: fsPoints } = await v4Fetch(`/api/assets/${asset}/history?range=${range}`);
+        renderPriceSignalChart(el, fsPoints, range);
+      });
     } catch (err) {
       renderDataState(chartEl, 'ERROR', err.message);
     }
