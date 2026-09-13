@@ -137,6 +137,25 @@ export async function computePortfolioFunnel(env, model, horizonHours) {
  * @param asset 'BTC' | 'ETH' | 'LINK' | 'SOL' | 'HYPE'
  */
 export async function computeAssetFunnel(env, asset, model, horizonHours) {
+  // Check model coverage FIRST — SOL and HYPE were never covered by either
+  // model, which is a structural, permanent fact and the more useful thing
+  // to say than "no recent price history" (also true, since V4's signal
+  // engine has never tracked market_observations for these two assets
+  // either, but that phrasing makes a permanent gap sound like a temporary
+  // one). Assets that ARE covered but hit a genuine, unexpected price-data
+  // gap still get that message below, unchanged.
+  const hasKnnCoverage = !!KNN_TABLES[asset];
+  const hasTimesFmCoverage = asset === 'BTC';
+  if (!hasKnnCoverage && !hasTimesFmCoverage) {
+    return { model, horizonHours, asset, historyPoints: [], funnel: null, message: `Neither prediction model has ever covered ${asset} \u2014 only BTC, ETH, and LINK have a k-NN model, and only BTC has TimesFM.` };
+  }
+  if (model === 'knn' && !hasKnnCoverage) {
+    return { model, horizonHours, asset, historyPoints: [], funnel: null, message: `k-NN has never been run for ${asset} \u2014 only BTC, ETH, and LINK.` };
+  }
+  if (model === 'timesfm' && !hasTimesFmCoverage) {
+    return { model, horizonHours, asset, historyPoints: [], funnel: null, message: `TimesFM has never been run for ${asset} \u2014 only BTC.` };
+  }
+
   const { results: candles } = await env.DB
     .prepare('SELECT ts, close FROM market_observations WHERE asset_id = ? AND ts >= ? ORDER BY ts ASC')
     .bind(asset, Date.now() - 7 * 86_400_000).all();
@@ -144,13 +163,10 @@ export async function computeAssetFunnel(env, asset, model, horizonHours) {
   const currentPrice = historyPoints.length ? historyPoints[historyPoints.length - 1].price : null;
 
   if (currentPrice == null) {
-    return { model, horizonHours, asset, historyPoints, funnel: null, message: `No recent price history for ${asset}.` };
+    return { model, horizonHours, asset, historyPoints, funnel: null, message: `No recent price history for ${asset} despite model coverage \u2014 this looks like a genuine data gap, not an expected limitation.` };
   }
 
   if (model === 'timesfm') {
-    if (asset !== 'BTC') {
-      return { model, horizonHours, asset, historyPoints, funnel: null, message: `TimesFM has never been run for ${asset} \u2014 only BTC.` };
-    }
     const { row, sufficiency } = await fetchTimesFmPrediction(env, horizonHours);
     if (!row) {
       return { model, horizonHours, asset, historyPoints, funnel: null, sufficiency, message: 'No current TimesFM prediction available for this horizon.' };
@@ -166,8 +182,7 @@ export async function computeAssetFunnel(env, asset, model, horizonHours) {
   if (model === 'knn') {
     const result = await fetchKnnPredictionForAsset(env, asset, horizonHours);
     if (!result) {
-      const reason = KNN_TABLES[asset] ? 'No current prediction available for this horizon.' : `k-NN has never been run for ${asset} \u2014 only BTC, ETH, and LINK.`;
-      return { model, horizonHours, asset, historyPoints, funnel: null, message: reason };
+      return { model, horizonHours, asset, historyPoints, funnel: null, message: 'No current prediction available for this horizon.' };
     }
     const range = projectAssetPriceRange(currentPrice, result.prediction.p25ReturnPct, result.prediction.medianReturnPct, result.prediction.p75ReturnPct);
     const sufficiency = await fetchKnnSufficiency(env, asset);

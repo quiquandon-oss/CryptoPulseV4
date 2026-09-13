@@ -1,8 +1,0 @@
-{
-    "model": "knn",
-    "horizonHours": 24,
-    "asset": "SOL",
-    "historyPoints": [],
-    "funnel": null,
-    "message": "No recent price history for SOL."
-}
