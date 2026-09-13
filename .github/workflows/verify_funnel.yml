@@ -1,0 +1,11 @@
+name: Verify prediction funnel (one-off)
+on:
+  workflow_dispatch: {}
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call prediction-funnel endpoint (knn, 24h)
+        run: curl -s "${{ secrets.V4_WORKER_URL }}/api/portfolio/prediction-funnel?model=knn&horizon=24" | head -c 3000
+      - name: Call prediction-funnel endpoint (timesfm, 24h)
+        run: curl -s "${{ secrets.V4_WORKER_URL }}/api/portfolio/prediction-funnel?model=timesfm&horizon=24" | head -c 2000
