@@ -301,3 +301,32 @@ body { font-feature-settings: "tnum" 1, "cv05" 1; transition: background-color 0
    segments need a real tap affordance instead. */
 .regime-segment { cursor: pointer; transition: opacity 0.15s ease; }
 .regime-segment:active { opacity: 0.7; }
+
+/* --- Dashboard-only "modern" treatment (dash-* prefix, index.html only) -
+   Deliberately NOT applied anywhere else — this is a one-page trial before
+   any wider rollout, per explicit direction. */
+.dash-hero-card {
+  background: linear-gradient(135deg, var(--bg-elevated) 0%, var(--bg-surface) 55%, var(--bg-surface) 100%);
+  border: 1px solid var(--accent-border);
+  box-shadow: 0 10px 34px -12px color-mix(in srgb, var(--accent) 35%, transparent), 0 2px 10px rgba(0,0,0,0.18);
+}
+.dash-hero-card.trend-down {
+  border-color: color-mix(in srgb, var(--down) 30%, var(--border));
+  box-shadow: 0 10px 34px -12px color-mix(in srgb, var(--down) 30%, transparent), 0 2px 10px rgba(0,0,0,0.18);
+}
+.dash-asset-card {
+  background: linear-gradient(160deg, var(--bg-elevated) 0%, var(--bg-surface) 70%);
+  border: 1px solid var(--border);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.dash-asset-card:active {
+  transform: scale(0.98);
+}
+.dash-asset-card.trend-up:hover, .dash-asset-card.trend-up:active {
+  border-color: color-mix(in srgb, var(--up) 40%, var(--border));
+  box-shadow: 0 8px 24px -10px color-mix(in srgb, var(--up) 30%, transparent);
+}
+.dash-asset-card.trend-down:hover, .dash-asset-card.trend-down:active {
+  border-color: color-mix(in srgb, var(--down) 40%, var(--border));
+  box-shadow: 0 8px 24px -10px color-mix(in srgb, var(--down) 30%, transparent);
+}

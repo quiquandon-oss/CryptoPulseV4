@@ -13,9 +13,16 @@
 
 <script>
   // Apply saved theme before first paint (avoids a flash of the wrong theme).
+  // DASHBOARD-ONLY TRIAL: defaults to dark regardless of system preference
+  // (V1 has no light mode at all — its vibrant dark palette is part of the
+  // identity). An explicit saved choice from the theme toggle — which is
+  // shared site-wide — always wins over this default. Other pages still
+  // follow system preference, so navigating away may show a theme change;
+  // that's an accepted side effect of trialing on one page before any
+  // wider rollout.
   (function () {
     var saved = localStorage.getItem('v4-theme');
-    var theme = saved || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    var theme = saved || 'dark';
     if (theme === 'light') document.documentElement.setAttribute('data-theme', 'light');
   })();
 </script>
@@ -35,16 +42,16 @@
   <!-- HEADER -->
   <header class="flex items-center justify-between mb-4 pb-3 border-b border-border">
     <div>
-      <h1 class="font-mono font-semibold text-lg tracking-tight text-ink">CryptoPulse V4</h1>
-      <p class="text-[11px] text-faint font-mono mt-0.5">Deterministic terminal</p>
+      <h1 class="font-sans font-semibold text-lg tracking-tight text-ink">CryptoPulse</h1>
+      <p class="text-[11px] text-faint font-sans mt-0.5">Deterministic evidence, not hype</p>
     </div>
     <div class="flex items-center gap-3">
       <div class="text-right">
-        <div id="marketStatus" class="flex items-center justify-end gap-1.5 text-xs font-mono font-medium">
+        <div id="marketStatus" class="flex items-center justify-end gap-1.5 text-xs font-sans font-medium">
           <span class="w-2 h-2 rounded-full bg-unavailable shrink-0" id="statusDot"></span>
           <span id="statusLabel">Loading…</span>
         </div>
-        <p class="text-[10px] text-faint font-mono mt-0.5" id="lastUpdate"></p>
+        <p class="text-[10px] text-faint font-sans mt-0.5" id="lastUpdate"></p>
       </div>
       <button class="theme-toggle touch-target" aria-label="Toggle theme" title="Toggle light/dark theme">
         <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
@@ -58,13 +65,13 @@
 
   <!-- PORTFOLIO HERO -->
   <section class="mb-3">
-    <a href="portfolio.html" id="portfolioHero" class="block bg-surface border border-border rounded-xl p-4 sm:p-5 hover:border-accent-30 transition-all shadow-sm">
-      <div class="flex items-center justify-between mb-2">
-        <span class="text-[11px] font-mono uppercase tracking-wider text-faint">Total Portfolio Value</span>
-        <span class="text-xs font-mono text-accent hover:underline flex items-center gap-1">My Assets &rarr;</span>
+    <a href="portfolio.html" id="portfolioHero" class="dash-hero-card block rounded-2xl p-5 sm:p-6 transition-all">
+      <div class="flex items-center justify-between mb-3">
+        <span class="text-xs font-sans text-faint">Total Portfolio Value</span>
+        <span class="text-xs font-sans font-medium text-accent flex items-center gap-1">My Assets &rarr;</span>
       </div>
       <div id="heroContent" class="space-y-3">
-        <p class="text-sm font-mono text-faint">Loading live portfolio…</p>
+        <p class="text-sm font-sans text-faint">Loading live portfolio…</p>
       </div>
     </a>
   </section>
@@ -72,7 +79,7 @@
   <!-- Equity curve — kept as a separate (non-link) section so its range
        buttons, fullscreen expand, and touch-drag tooltip don't fight the
        hero card's own link for taps. -->
-  <section id="heroChartSection" class="mb-5 bg-surface border border-border rounded-xl p-4 sm:p-5 hidden">
+  <section id="heroChartSection" class="mb-5 dash-hero-card rounded-2xl p-4 sm:p-5 hidden">
     <div class="flex items-center justify-between gap-2 mb-2">
       <div id="heroRangeButtons" class="flex gap-1 overflow-x-auto no-scrollbar"></div>
       <div id="heroChartExpand"></div>
@@ -87,11 +94,11 @@
         <div class="flex items-center gap-2.5 min-w-0">
           <span id="bannerDot" class="w-2.5 h-2.5 rounded-full bg-unavailable shrink-0"></span>
           <div class="min-w-0">
-            <span id="bannerTitle" class="font-mono text-xs font-semibold uppercase tracking-tight block">SYSTEM CHECKING</span>
-            <span id="bannerDetail" class="text-[11px] text-faint truncate block">Loading telemetry health…</span>
+            <span id="bannerTitle" class="font-sans text-sm font-semibold block">System checking&hellip;</span>
+            <span id="bannerDetail" class="text-[11px] text-faint truncate block font-sans">Loading telemetry health&hellip;</span>
           </div>
         </div>
-        <span class="text-xs font-mono text-faint shrink-0">Details &rarr;</span>
+        <span class="text-xs font-sans text-faint shrink-0">Details &rarr;</span>
       </div>
     </a>
   </section>
@@ -99,17 +106,17 @@
   <!-- MARKET OVERVIEW -->
   <section class="mb-6">
     <div class="flex items-center justify-between mb-3">
-      <h2 class="text-xs font-mono uppercase tracking-wider text-faint font-semibold">Market Overview</h2>
-      <span class="text-[10px] font-mono text-faint">Live Signals</span>
+      <h2 class="text-sm font-sans font-semibold text-ink">Market Overview</h2>
+      <span class="text-[11px] font-sans text-faint">Live Signals</span>
     </div>
     <div id="overviewCards" class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-      <div class="bg-surface border border-border rounded-xl p-4 text-xs font-mono text-faint">Loading market overview…</div>
+      <div class="bg-surface border border-border rounded-xl p-4 text-xs font-sans text-faint">Loading market overview…</div>
     </div>
   </section>
 
-  <footer class="flex items-center justify-between text-[11px] font-mono text-faint mt-8 pt-4 border-t border-border">
-    <span>CryptoPulse V4</span>
-    <span>Institutional Terminal</span>
+  <footer class="flex items-center justify-between text-[11px] font-sans text-faint mt-8 pt-4 border-t border-border">
+    <span>CryptoPulse</span>
+    <span>Powered by deterministic evidence</span>
   </footer>
 </div>
 
@@ -167,43 +174,45 @@ function initHeroChart() {
     el.lastUpdate.textContent = `Checked ${new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`;
 
     el.bannerDot.className = `w-2.5 h-2.5 rounded-full shrink-0 ${isOk ? 'bg-up' : isDegraded ? 'bg-recent' : 'bg-unavailable'}`;
-    el.bannerTitle.textContent = isDegraded ? 'SYSTEM DEGRADED' : isOk ? 'SYSTEM HEALTHY' : `SYSTEM ${health.overall}`;
+    el.bannerTitle.textContent = isDegraded ? 'System degraded' : isOk ? 'System healthy' : `System ${health.overall.toLowerCase()}`;
 
     const staleMsg = isDegraded ? 'Some market data feeds are stale' : health.overall === 'LIVE' ? 'Market data feeds live & operational' : 'System telemetry operational';
     el.bannerDetail.textContent = staleMsg;
-    el.bannerTitle.className = `font-mono text-xs font-semibold uppercase tracking-tight block ${isDegraded ? 'text-warn' : isOk ? 'text-up' : 'text-faint'}`;
+    el.bannerTitle.className = `font-sans text-sm font-semibold block ${isDegraded ? 'text-warn' : isOk ? 'text-up' : 'text-faint'}`;
   } catch (err) {
     el.statusLabel.textContent = 'OFFLINE';
     el.statusDot.className = 'w-2 h-2 rounded-full bg-unavailable';
     el.bannerDot.className = 'w-2.5 h-2.5 rounded-full bg-unavailable shrink-0';
-    el.bannerTitle.textContent = 'SYSTEM UNREACHABLE';
-    el.bannerTitle.className = 'font-mono text-xs font-semibold uppercase tracking-tight block text-down';
+    el.bannerTitle.textContent = 'System unreachable';
+    el.bannerTitle.className = 'font-sans text-sm font-semibold block text-down';
     el.bannerDetail.textContent = 'Could not communicate with Workers API';
   }
 
   // 2. Fetch Portfolio Hero Data
   try {
     const s = await v4Fetch('/api/portfolio');
+    const heroCardEl = document.getElementById('portfolioHero');
     if (!s.hasData) {
       el.heroContent.innerHTML = `
-        <p class="text-sm font-mono text-faint">No portfolio transactions imported yet.</p>
-        <p class="text-xs font-mono text-accent">Tap to import Neverless or Revolut statements &rarr;</p>`;
+        <p class="text-sm font-sans text-faint">No portfolio transactions imported yet.</p>
+        <p class="text-xs font-sans text-accent">Tap to import Neverless or Revolut statements &rarr;</p>`;
     } else {
       const pnlVal = s.unrealizedPnl;
       const pnlPct = s.unrealizedPnlPct;
       const pnlColor = pnlVal == null ? 'text-faint' : pnlVal >= 0 ? 'text-up' : 'text-down';
       const pnlSign = pnlVal != null && pnlVal >= 0 ? '+' : '';
+      if (pnlVal != null && pnlVal < 0) heroCardEl.classList.add('trend-down');
 
       el.heroContent.innerHTML = `
         <div class="flex items-baseline justify-between gap-2">
-          <span class="text-2xl sm:text-3xl font-mono font-semibold tracking-tight text-ink">${fmtUsd(s.totalValue)}</span>
+          <span class="text-4xl sm:text-5xl font-sans font-bold tracking-tight text-ink">${fmtUsd(s.totalValue)}</span>
           <div class="text-right">
-            <span class="text-sm sm:text-base font-mono font-medium block ${pnlColor}">${pnlSign}${fmtUsd(pnlVal)}</span>
-            <span class="text-xs font-mono font-medium block ${pnlColor}">${fmtPct(pnlPct)}</span>
+            <span class="text-base sm:text-lg font-sans font-semibold block ${pnlColor}">${pnlSign}${fmtUsd(pnlVal)}</span>
+            <span class="text-sm font-sans font-medium block ${pnlColor}">${fmtPct(pnlPct)}</span>
           </div>
         </div>
-        <div class="pt-2 border-t border-border flex items-center justify-between text-xs font-mono">
-          <span class="text-faint">Invested Capital:</span>
+        <div class="pt-3 border-t border-border flex items-center justify-between text-sm font-sans">
+          <span class="text-faint">Invested Capital</span>
           <span class="font-medium text-ink">${fmtUsd(s.investedCapital)}</span>
         </div>`;
 
@@ -211,14 +220,14 @@ function initHeroChart() {
       initHeroChart();
     }
   } catch {
-    el.heroContent.innerHTML = '<p class="text-sm font-mono text-faint">Portfolio details unavailable.</p>';
+    el.heroContent.innerHTML = '<p class="text-sm font-sans text-faint">Portfolio details unavailable.</p>';
   }
 
   // 3. Fetch Market Overview
   try {
     const { overview } = await v4Fetch('/api/market/overview');
     if (!overview || !overview.length) {
-      el.overviewCards.innerHTML = '<div class="bg-surface border border-border rounded-xl p-4 text-xs font-mono text-faint">No market assets found.</div>';
+      el.overviewCards.innerHTML = '<div class="bg-surface border border-border rounded-xl p-4 text-xs font-sans text-faint">No market assets found.</div>';
     } else {
       el.overviewCards.innerHTML = overview.map((item) => {
         const s = item.signal;
@@ -226,6 +235,7 @@ function initHeroChart() {
         const riskColor = !s ? 'text-faint' : s.risk === 'LOW' ? 'text-up' : s.risk === 'HIGH' ? 'text-down' : 'text-warn';
         const changePct = item.change24h != null ? item.change24h : null;
         const changeColor = changePct == null ? 'text-faint' : changePct >= 0 ? 'text-up' : 'text-down';
+        const trendClass = s?.direction === 'BULLISH' ? 'trend-up' : s?.direction === 'BEARISH' ? 'trend-down' : '';
 
         // Mini score bar or sparkline indicator
         const score = s ? s.score : 0;
@@ -234,21 +244,21 @@ function initHeroChart() {
         const barBg = s?.direction === 'BULLISH' ? 'bg-up' : s?.direction === 'BEARISH' ? 'bg-down' : 'bg-faint';
 
         return `
-          <a href="asset.html?asset=${item.asset}" class="block bg-surface border border-border rounded-xl p-4 hover:border-accent-30 transition-all space-y-3">
+          <a href="asset.html?asset=${item.asset}" class="dash-asset-card block rounded-xl p-4 space-y-3 ${trendClass}">
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-2">
-                <span class="font-mono font-semibold text-base text-ink">${item.asset}</span>
-                <span class="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded border border-border bg-elevated ${riskColor}">${s ? s.risk : 'NO DATA'}</span>
+                <span class="font-sans font-bold text-lg text-ink">${item.asset}</span>
+                <span class="text-[10px] font-sans font-medium px-1.5 py-0.5 rounded border border-border bg-elevated ${riskColor}">${s ? s.risk : 'No data'}</span>
               </div>
-              <span class="font-mono font-medium text-sm text-ink">${fmtUsd(item.price)}</span>
+              <span class="font-sans font-semibold text-sm text-ink">${fmtUsd(item.price)}</span>
             </div>
-            <div class="flex items-center justify-between text-xs font-mono">
+            <div class="flex items-center justify-between text-xs font-sans">
               <div>
-                <span class="text-[10px] text-faint uppercase block">Signal</span>
-                <span class="font-medium ${dirColor}">${s ? `${s.direction} ${s.score >= 0 ? '+' : ''}${s.score}` : 'Collecting data'}</span>
+                <span class="text-[11px] text-faint block">Signal</span>
+                <span class="font-medium ${dirColor}">${s ? `${s.direction.charAt(0) + s.direction.slice(1).toLowerCase()} ${s.score >= 0 ? '+' : ''}${s.score}` : 'Collecting data'}</span>
               </div>
               <div class="text-right">
-                <span class="text-[10px] text-faint uppercase block">24h Change</span>
+                <span class="text-[11px] text-faint block">24h Change</span>
                 <span class="font-medium ${changeColor}">${changePct != null ? (changePct >= 0 ? '+' : '') + (changePct * 100).toFixed(2) + '%' : '—'}</span>
               </div>
             </div>
@@ -260,7 +270,7 @@ function initHeroChart() {
       }).join('');
     }
   } catch (err) {
-    el.overviewCards.innerHTML = `<div class="bg-surface border border-border rounded-xl p-4 text-xs font-mono text-down">Failed loading signals: ${escapeHtml(err.message)}</div>`;
+    el.overviewCards.innerHTML = `<div class="bg-surface border border-border rounded-xl p-4 text-xs font-sans text-down">Failed loading signals: ${escapeHtml(err.message)}</div>`;
   }
 })();
 </script>
