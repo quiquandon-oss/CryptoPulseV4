@@ -21,6 +21,58 @@ async function v4Fetch(path) {
 const FRESHNESS_DOT = { LIVE: 'bg-up', RECENT: 'bg-up', STALE: 'bg-recent', UNAVAILABLE: 'bg-stale', OK: 'bg-up', ERROR: 'bg-stale' };
 const DIRECTION_COLOR = { BULLISH: 'text-up', BEARISH: 'text-down', NEUTRAL: 'text-muted' };
 
+// --- Coin brand colors & icon badges --------------------------------------
+// Colors verified against multiple independent sources this session (not
+// guessed): BTC/ETH/LINK match their own official brand pages / multiple
+// independent brand-color databases in agreement. SOL uses its actual
+// two-color gradient identity rather than a single arbitrary pick. HYPE
+// has NO confirmed official color — Hyperliquid's own brand kit page links
+// only to logo image files, no hex values found anywhere searched — so
+// `hype.unofficial: true` is set and never dropped silently; anywhere this
+// color is used, it's this app's own choice, not a verified Hyperliquid brand color.
+const COIN_META = {
+  BTC: { color: '#F7931A', gradient: null },
+  ETH: { color: '#627EEA', gradient: null },
+  LINK: { color: '#375BD2', gradient: null },
+  SOL: { color: '#9945FF', gradient: ['#9945FF', '#14F195'] },
+  HYPE: { color: '#00D4AA', gradient: null, unofficial: true },
+};
+function coinColor(asset) {
+  return COIN_META[asset]?.color || 'var(--accent)';
+}
+
+/**
+ * Simple geometric badge per coin — deliberately NOT a pixel copy of any
+ * official logo artwork (Ethereum's exact diamond mark, Chainlink's exact
+ * hexagon icon, etc. are registered brand assets); these are plain generic
+ * shapes (circle/diamond/hexagon/bars) in the coin's own verified color,
+ * the same safe pattern most third-party trackers use for attribution
+ * without reproducing trademarked design work.
+ */
+function coinIconSvg(asset, size = 24) {
+  const meta = COIN_META[asset];
+  const color = meta?.color || 'var(--accent)';
+  const gradId = `coingrad-${asset}-${Math.random().toString(36).slice(2, 7)}`;
+  const fill = meta?.gradient ? `url(#${gradId})` : color;
+  const gradDef = meta?.gradient
+    ? `<defs><linearGradient id="${gradId}" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${meta.gradient[0]}"/><stop offset="100%" stop-color="${meta.gradient[1]}"/></linearGradient></defs>`
+    : '';
+
+  let shape;
+  if (asset === 'BTC') {
+    shape = `<circle cx="12" cy="12" r="11" fill="${fill}"/><text x="12" y="16.5" text-anchor="middle" font-size="13" font-weight="700" fill="white" font-family="sans-serif">\u20bf</text>`;
+  } else if (asset === 'ETH') {
+    shape = `<polygon points="12,1 21,12 12,23 3,12" fill="${fill}"/><polygon points="12,1 21,12 12,15 3,12" fill="white" opacity="0.25"/>`;
+  } else if (asset === 'LINK') {
+    shape = `<polygon points="12,1 21,6.5 21,17.5 12,23 3,17.5 3,6.5" fill="${fill}"/>`;
+  } else if (asset === 'SOL') {
+    shape = `<rect x="2" y="4" width="20" height="4" rx="2" fill="${fill}"/><rect x="2" y="10" width="20" height="4" rx="2" fill="${fill}" opacity="0.75"/><rect x="2" y="16" width="20" height="4" rx="2" fill="${fill}" opacity="0.5"/>`;
+  } else {
+    shape = `<circle cx="12" cy="12" r="11" fill="${fill}"/><text x="12" y="16.5" text-anchor="middle" font-size="11" font-weight="700" fill="white" font-family="sans-serif">${(asset || '?')[0]}</text>`;
+  }
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" class="shrink-0">${gradDef}${shape}</svg>`;
+}
+
 // --- Shared: smooth curves for every line chart ---------------------------
 // Catmull-Rom -> cubic Bezier conversion (tension 1/6, the standard factor).
 // Straight polyline segments are the single biggest visual cue that reads as
@@ -478,19 +530,18 @@ function renderAllocationDonut(container, allocation) {
     return;
   }
   const total = filtered.reduce((s, a) => s + a.value, 0);
-  const colors = ['var(--accent)', 'var(--up)', 'var(--warn)', 'var(--down)', 'var(--accent-blue)'];
   const R = 60, C = 2 * Math.PI * R, CX = 80, CY = 80;
   let offset = 0;
   const circles = filtered.map((a, i) => {
     const frac = a.value / total;
     const dash = frac * C;
-    const circle = `<circle data-asset="${a.asset}" class="donut-slice" cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="${colors[i % colors.length]}" stroke-width="20" stroke-dasharray="${dash.toFixed(2)} ${(C - dash).toFixed(2)}" stroke-dashoffset="${(-offset).toFixed(2)}"/>`;
+    const circle = `<circle data-asset="${a.asset}" class="donut-slice" cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="${coinColor(a.asset)}" stroke-width="20" stroke-dasharray="${dash.toFixed(2)} ${(C - dash).toFixed(2)}" stroke-dashoffset="${(-offset).toFixed(2)}"/>`;
     offset += dash;
     return circle;
   }).join('');
   const legend = filtered.map((a, i) => `
     <a href="asset.html?asset=${a.asset}" data-asset="${a.asset}" class="donut-legend-item flex items-center gap-2 text-xs font-mono hover-text-muted">
-      <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${colors[i % colors.length]}"></span>
+      ${coinIconSvg(a.asset, 18)}
       <span class="font-medium">${a.asset}</span>
       <span class="text-faint">${((a.allocationPct ?? 0) * 100).toFixed(1)}%</span>
     </a>`).join('');
@@ -578,12 +629,12 @@ function renderBenchmarkChart(container, benchmarkData) {
       </defs>
       ${gridSvg}
       <path d="${smoothFillPathD(portPts, H - pad)}" fill="url(#${gradId})"/>
-      ${btcPts.length ? `<path d="${smoothPathD(btcPts)}" fill="none" stroke="var(--warn)" stroke-width="1.5" stroke-dasharray="3 3"/>` : ''}
+      ${btcPts.length ? `<path d="${smoothPathD(btcPts)}" fill="none" stroke="${coinColor('BTC')}" stroke-width="1.5" stroke-dasharray="3 3"/>` : ''}
       <path d="${smoothPathD(portPts)}" fill="none" stroke="var(--accent)" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round"/>
     </svg>
     <div class="flex justify-between items-center ${captionClass(isFullscreen)} font-mono text-faint mt-1 px-1">
       <span>${fmtDate(points[0].ts)} (Base=100)</span>
-      <span><span class="text-accent">— </span>Portfolio &nbsp; <span class="text-warn">- - </span>BTC Benchmark</span>
+      <span><span class="text-accent">— </span>Portfolio &nbsp; <span style="color:${coinColor('BTC')}">- - </span>BTC Benchmark</span>
       <span>${fmtDate(points[n - 1].ts)}</span>
     </div>`;
 
@@ -608,11 +659,12 @@ function renderAssetPositionChart(container, positionHistory) {
 // button (e.g. "30d") shows the exact same points as a shorter one would —
 // not a bug, just genuinely less signal history than that button implies
 // yet, and worth saying so instead of silently looking identical.
-function renderPriceSignalChart(container, points, requestedRange = null) {
+function renderPriceSignalChart(container, points, requestedRange = null, asset = null) {
   if (!points || points.length < 2) {
     renderDataState(container, 'INSUFFICIENT_DATA', 'Not enough historical signal observations for chart.');
     return;
   }
+  const lineColor = asset ? coinColor(asset) : 'var(--accent)';
   const RANGE_MS = { '12h': 12, '24h': 24, '7d': 24 * 7, '30d': 24 * 30 };
   const { W, H, isFullscreen } = getChartDimensions(600, 240);
   const scaleK = H / 240;
@@ -649,19 +701,19 @@ function renderPriceSignalChart(container, points, requestedRange = null) {
     <svg viewBox="0 0 ${W} ${H}" class="w-full h-auto">
       <defs>
         <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.18"/>
-          <stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/>
+          <stop offset="0%" stop-color="${lineColor}" stop-opacity="0.18"/>
+          <stop offset="100%" stop-color="${lineColor}" stop-opacity="0"/>
         </linearGradient>
       </defs>
       ${priceGrid}
       <path d="${smoothFillPathD(pricePts, priceH - pad)}" fill="url(#${gradId})"/>
-      <path d="${smoothPathD(pricePts)}" fill="none" stroke="var(--accent)" stroke-width="1.75" stroke-linejoin="round" stroke-linecap="round" />
+      <path d="${smoothPathD(pricePts)}" fill="none" stroke="${lineColor}" stroke-width="1.75" stroke-linejoin="round" stroke-linecap="round" />
       <line x1="${pad}" y1="${scoreMid}" x2="${W - pad}" y2="${scoreMid}" stroke="var(--border)" stroke-width="1" />
       ${bars}
     </svg>
     <div class="flex justify-between font-mono ${captionClass(isFullscreen)} text-faint mt-1 px-1">
       <span>${fmtDateTime(points[0].ts)}</span>
-      <span class="text-accent">— price</span>
+      <span style="color:${lineColor}">— price</span>
       <span>${fmtDateTime(points[n - 1].ts)}</span>
     </div>
     ${sparseNote}`;
@@ -1219,6 +1271,13 @@ function renderPredictionFunnelChart(container, historyPoints, funnelData) {
   const futureX = x(n - 1 + futureSlot);
   const trendUp = funnel.medianValue >= funnel.currentValue;
   const color = trendUp ? 'var(--up)' : 'var(--down)';
+  // The history line represents THIS coin's actual past price (identity),
+  // distinct from the projection cone's up/down performance coloring —
+  // uses the coin's real brand color when this is a per-coin funnel
+  // (funnelData.asset is only set by computeAssetFunnel, never the
+  // portfolio-wide funnel), generic accent for the portfolio view where
+  // there's no single coin to represent.
+  const historyColor = funnelData?.asset ? coinColor(funnelData.asset) : 'var(--accent)';
   const gradId = `plotgrad-${Math.random().toString(36).slice(2, 9)}`;
 
   const conePath = `M${nowPt.x.toFixed(1)},${nowPt.y.toFixed(1)} L${futureX.toFixed(1)},${y(funnel.p75Value).toFixed(1)} L${futureX.toFixed(1)},${y(funnel.p25Value).toFixed(1)} Z`;
@@ -1230,8 +1289,8 @@ function renderPredictionFunnelChart(container, historyPoints, funnelData) {
     <svg viewBox="0 0 ${W} ${H}" class="w-full h-auto">
       <defs>
         <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.22"/>
-          <stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/>
+          <stop offset="0%" stop-color="${historyColor}" stop-opacity="0.22"/>
+          <stop offset="100%" stop-color="${historyColor}" stop-opacity="0"/>
         </linearGradient>
       </defs>
       <path d="${smoothFillPathD(histPts, H - pad)}" fill="url(#${gradId})"/>
@@ -1240,11 +1299,11 @@ function renderPredictionFunnelChart(container, historyPoints, funnelData) {
       <path d="${upperEdge}" fill="none" stroke="${color}" stroke-width="1.25" stroke-dasharray="3 3" opacity="0.7"/>
       <path d="${lowerEdge}" fill="none" stroke="${color}" stroke-width="1.25" stroke-dasharray="3 3" opacity="0.7"/>
       <path d="${medianLine}" fill="none" stroke="${color}" stroke-width="2" stroke-dasharray="5 3"/>
-      <path d="${smoothPathD(histPts)}" fill="none" stroke="var(--accent)" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round"/>
-      <circle cx="${nowPt.x.toFixed(1)}" cy="${nowPt.y.toFixed(1)}" r="3" fill="var(--accent)"/>
+      <path d="${smoothPathD(histPts)}" fill="none" stroke="${historyColor}" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round"/>
+      <circle cx="${nowPt.x.toFixed(1)}" cy="${nowPt.y.toFixed(1)}" r="3" fill="${historyColor}"/>
     </svg>
     <div class="flex items-center justify-center gap-4 ${captionClass(isFullscreen)} font-mono mt-1.5">
-      <span class="flex items-center gap-1"><span class="w-2.5 h-0.5 rounded-full inline-block" style="background:var(--accent)"></span><span class="text-faint">History</span></span>
+      <span class="flex items-center gap-1"><span class="w-2.5 h-0.5 rounded-full inline-block" style="background:${historyColor}"></span><span class="text-faint">History</span></span>
       <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm inline-block" style="background:${color}; opacity:0.4"></span><span class="text-faint">Projected range (${trendUp ? '+' : ''}${(((funnel.medianValue / funnel.currentValue) - 1) * 100).toFixed(1)}% median)</span></span>
     </div>
     <p class="${captionClass(isFullscreen)} text-faint text-center mt-1 px-2">Reuses V2's existing prediction models \u2014 not a new one built for this chart. See Model Details below for real accuracy and coverage before reading too much into this.</p>`;

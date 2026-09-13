@@ -135,7 +135,7 @@
   </footer>
 </div>
 
-<script src="app.js?v=2026091215"></script>
+<script src="app.js?v=2026091216"></script>
 <script>
 renderNav('index.html');
 
@@ -283,6 +283,7 @@ function initHeroChart() {
           <a href="asset.html?asset=${item.asset}" class="dash-asset-card block rounded-xl p-4 space-y-3 ${trendClass}">
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-2">
+                ${coinIconSvg(item.asset, 22)}
                 <span class="font-sans font-bold text-lg text-ink">${item.asset}</span>
                 <span class="text-[10px] font-sans font-medium px-1.5 py-0.5 rounded border border-border bg-elevated ${riskColor}">${s ? s.risk : 'No data'}</span>
               </div>

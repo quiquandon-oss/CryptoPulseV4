@@ -43,6 +43,7 @@
   <header class="mb-5 pb-4 border-b border-border flex items-center justify-between font-mono">
     <div>
       <div class="flex items-center gap-2">
+        <div id="assetIcon"></div>
         <h1 id="assetTitle" class="font-semibold text-2xl tracking-tight text-ink">—</h1>
         <span id="assetSymbolBadge" class="text-[10px] font-semibold text-accent uppercase bg-accent-soft px-2 py-0.5 rounded border border-accent-30">Asset</span>
       </div>
@@ -142,7 +143,7 @@
 
 </div>
 
-<script src="app.js?v=2026091215"></script>
+<script src="app.js?v=2026091216"></script>
 <script>
 renderNav('asset.html');
 
@@ -151,6 +152,7 @@ renderNav('asset.html');
   const asset = (params.get('asset') || 'BTC').toUpperCase();
   document.getElementById('assetTitle').textContent = asset;
   document.getElementById('assetSymbolBadge').textContent = `${asset} Intelligence`;
+  document.getElementById('assetIcon').innerHTML = coinIconSvg(asset, 32);
 
   const dirColor = (d) => d === 'BULLISH' ? 'text-up' : d === 'BEARISH' ? 'text-down' : 'text-muted';
   const stateColor = (d) => d === 'BULLISH' ? 'text-up' : d === 'BEARISH' ? 'text-down' : 'text-faint';
@@ -258,10 +260,10 @@ renderNav('asset.html');
     chartEl.innerHTML = chartSkeletonHtml(180);
     try {
       const { points } = await v4Fetch(`/api/assets/${asset}/history?range=${activeRange}`);
-      renderPriceSignalChart(chartEl, points, activeRange);
+      renderPriceSignalChart(chartEl, points, activeRange, asset);
       addFullscreenButtonWithRange('chartExpand', `${asset} — Signal Timeline & Price Chart`, ranges, () => activeRange, async (range, el) => {
         const { points: fsPoints } = await v4Fetch(`/api/assets/${asset}/history?range=${range}`);
-        renderPriceSignalChart(el, fsPoints, range);
+        renderPriceSignalChart(el, fsPoints, range, asset);
       });
     } catch (err) {
       renderDataState(chartEl, 'ERROR', err.message);

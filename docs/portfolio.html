@@ -186,7 +186,7 @@
 
 </div>
 
-<script src="app.js?v=2026091215"></script>
+<script src="app.js?v=2026091216"></script>
 <script>
 renderNav('portfolio.html');
 
@@ -348,7 +348,8 @@ async function loadHoldings() {
       return `
         <div class="bg-elevated border border-border rounded-lg p-3.5 font-mono space-y-2 hover:border-accent-30 transition-all">
           <div class="flex items-center justify-between border-b border-border pb-2">
-            <a href="asset.html?asset=${a.asset}" class="font-semibold text-sm text-accent hover:underline flex items-center gap-1">
+            <a href="asset.html?asset=${a.asset}" class="font-semibold text-sm text-accent hover:underline flex items-center gap-1.5">
+              ${coinIconSvg(a.asset, 20)}
               ${a.asset} &rarr;
             </a>
             <div class="text-right">
