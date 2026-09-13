@@ -85,6 +85,9 @@ export default {
       if (parts[1] === 'portfolio' && parts[2] === 'assets') {
         return await handlePortfolioAssets(env);
       }
+      if (parts[1] === 'portfolio' && parts[2] === 'transactions') {
+        return await handlePortfolioTransactions(env, url);
+      }
       if (parts[1] === 'portfolio' && parts[2] === 'history') {
         return await handlePortfolioHistory(env, url);
       }
@@ -322,6 +325,16 @@ async function handlePortfolioSummary(env) {
 async function handlePortfolioAssets(env) {
   const summary = await portfolio.buildPortfolioSummary(env);
   return json({ assets: summary.byAsset });
+}
+
+async function handlePortfolioTransactions(env, url) {
+  const assetFilter = url.searchParams.get('asset')?.toUpperCase();
+  const all = await portfolio.getAllTransactions(env.DB);
+  const transactions = assetFilter ? all.filter((t) => t.asset === assetFilter) : all;
+  // Sorted most-recent-first for the ledger UI — getAllTransactions itself
+  // returns oldest-first (needed for holdings computation order).
+  transactions.sort((a, b) => b.timestamp - a.timestamp);
+  return json({ transactions, count: transactions.length });
 }
 
 async function handlePortfolioAllocation(env) {

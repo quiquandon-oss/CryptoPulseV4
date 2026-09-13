@@ -45,7 +45,7 @@ export async function buildPortfolioSummary(env, now = Date.now()) {
 
 export async function insertTransactions(db, transactions) {
   const deduped = dedupeTransactions(transactions);
-  if (!deduped.length) return { inserted: 0, received: transactions.length };
+  if (!deduped.length) return { inserted: 0, received: transactions.length, newTransactions: [] };
 
   const stmt = db.prepare(
     `INSERT OR IGNORE INTO portfolio_transactions
@@ -57,8 +57,14 @@ export async function insertTransactions(db, transactions) {
     tx.fees ?? 0, tx.timestamp, tx.source, tx.priceApproximation ?? null,
   ));
   const results = await db.batch(batch);
-  const inserted = results.reduce((sum, r) => sum + (r.meta?.changes ?? 0), 0);
-  return { inserted, received: transactions.length, deduped: deduped.length };
+  // D1's batch results are one-to-one with the statements sent, in order —
+  // meta.changes on each tells us whether THAT SPECIFIC row was actually
+  // inserted (1) or silently ignored as an existing duplicate (0), not just
+  // an aggregate count. This is what lets the import UI say exactly which
+  // transactions are new, matching V1's "show the result immediately."
+  const newTransactions = deduped.filter((_, i) => (results[i]?.meta?.changes ?? 0) > 0);
+  const inserted = newTransactions.length;
+  return { inserted, received: transactions.length, deduped: deduped.length, newTransactions };
 }
 
 export async function getAllTransactions(db) {

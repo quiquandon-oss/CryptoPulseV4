@@ -186,7 +186,7 @@
 
 </div>
 
-<script src="app.js?v=2026091217"></script>
+<script src="app.js?v=2026091218"></script>
 <script>
 renderNav('portfolio.html');
 
@@ -267,9 +267,25 @@ async function submitImport(format, rows, eurUsdRate = null) {
       return;
     }
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    document.getElementById('uploadStatus').textContent =
-      `Done — ${data.extracted} tracked-asset transactions found, ${data.inserted} new inserted.`;
-    loadAll();
+
+    const newTxs = data.newTransactions || [];
+    const skipped = (data.deduped ?? data.extracted ?? 0) - newTxs.length;
+    const statusEl = document.getElementById('uploadStatus');
+
+    if (newTxs.length) {
+      // Matches V1's exact pattern: a short toast-style confirmation plus a
+      // more detailed persistent line, then jump straight to the holdings
+      // list with the affected coin(s) already expanded — "show the result
+      // immediately, no extra tap required," not just a bare count.
+      statusEl.innerHTML = `<span class="text-up font-semibold">&#10003; ${newTxs.length} transaction${newTxs.length === 1 ? '' : 's'} imported</span>${skipped ? ` <span class="text-faint">&middot; ${skipped} already had them</span>` : ''}`;
+      allTransactionsCache = null; // force a fresh fetch — the new rows aren't in the old cache
+      const newAssets = [...new Set(newTxs.map((t) => t.asset))];
+      newAssets.forEach((a) => capTxOpen.add(a));
+      loadAll();
+      document.getElementById('holdingsTable').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+      statusEl.innerHTML = `<span class="text-faint">Nothing new &mdash; all ${skipped || data.extracted || 0} were already imported.</span>`;
+    }
   } catch (err) {
     document.getElementById('uploadStatus').textContent = `Upload failed: ${err.message}`;
   }
@@ -347,15 +363,47 @@ async function loadInsights() {
   }
 }
 
+let allTransactionsCache = null;
+const capTxOpen = new Set(); // which coins' transaction ledgers are expanded
+
+function buildTxLedgerHtml(txs) {
+  if (!txs.length) return '<p class="text-[11px] text-faint px-1 pt-1">No transactions recorded.</p>';
+  const rows = txs.map((t) => {
+    const typeColor = t.type === 'BUY' || t.type === 'TRANSFER_IN' ? 'text-up' : 'text-down';
+    const priceLabel = t.type === 'TRANSFER_IN' && t.unitPriceUsd === 0
+      ? '<span class="text-faint">$0 (reward)</span>'
+      : fmtUsd(t.unitPriceUsd);
+    return `
+      <div class="flex items-center justify-between text-[10px] py-1.5 border-b border-border last:border-0">
+        <div>
+          <span class="font-semibold ${typeColor}">${t.type}</span>
+          <span class="text-faint ml-1">${fmtDate(t.timestamp)} &middot; ${t.account}</span>
+        </div>
+        <div class="text-right">
+          <span class="text-ink font-medium">${t.quantity.toFixed(6)}</span>
+          <span class="text-faint"> @ ${priceLabel}</span>
+        </div>
+      </div>`;
+  }).join('');
+  return `<div class="bg-surface rounded-lg px-2.5 py-1 mt-1 max-h-64 overflow-y-auto">${rows}</div>`;
+}
+
 async function loadHoldings() {
   const el = document.getElementById('holdingsTable');
   try {
     const { assets } = await v4Fetch('/api/portfolio/assets');
     if (!assets || !assets.length) { el.innerHTML = '<div class="px-4 py-6 text-xs font-mono text-faint">No position holdings found.</div>'; return; }
+    if (!allTransactionsCache) {
+      const { transactions } = await v4Fetch('/api/portfolio/transactions');
+      allTransactionsCache = transactions;
+    }
 
     el.innerHTML = assets.map((a) => {
       const pnlColor = a.pnl == null ? 'text-faint' : a.pnl >= 0 ? 'text-up' : 'text-down';
       const pnlSign = a.pnl != null && a.pnl >= 0 ? '+' : '';
+      const coinTxs = allTransactionsCache.filter((t) => t.asset === a.asset);
+      const buyCount = coinTxs.filter((t) => t.type === 'BUY' || t.type === 'TRANSFER_IN').length;
+      const isOpen = capTxOpen.has(a.asset);
 
       return `
         <div class="bg-elevated border border-border rounded-lg p-3.5 font-mono space-y-2 hover:border-accent-30 transition-all">
@@ -364,31 +412,40 @@ async function loadHoldings() {
               ${coinIconSvg(a.asset, 20)}
               ${a.asset} &rarr;
             </a>
-            <div class="text-right">
-              <span class="text-sm font-semibold text-ink block">${fmtUsd(a.value)}</span>
-              <span class="text-[10px] text-faint block">Alloc: ${a.allocationPct != null ? (a.allocationPct * 100).toFixed(1) + '%' : '—'}</span>
+            <span class="text-[10px] text-faint">${a.quantity.toFixed(4)} ${a.asset} &middot; ${buyCount} buy${buyCount === 1 ? '' : 's'}</span>
+          </div>
+          <div class="grid grid-cols-3 gap-2 text-xs">
+            <div class="bg-surface rounded-lg p-2 text-center">
+              <span class="text-[10px] text-faint block">Invested</span>
+              <span class="font-semibold text-ink">${fmtUsd(a.investedCost)}</span>
+            </div>
+            <div class="bg-surface rounded-lg p-2 text-center">
+              <span class="text-[10px] text-faint block">Now Worth</span>
+              <span class="font-semibold text-ink">${fmtUsd(a.value)}</span>
+            </div>
+            <div class="bg-surface rounded-lg p-2 text-center">
+              <span class="text-[10px] text-faint block">Gain/Loss</span>
+              <span class="font-semibold ${pnlColor}">${a.pnl != null ? pnlSign + fmtUsd(a.pnl) : '—'}</span>
             </div>
           </div>
-          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs pt-1">
-            <div>
-              <span class="text-[10px] text-faint uppercase block">Quantity</span>
-              <span class="font-medium text-ink">${a.quantity.toFixed(4)}</span>
-            </div>
-            <div>
-              <span class="text-[10px] text-faint uppercase block">Avg Cost</span>
-              <span class="font-medium text-ink">${fmtUsd(a.avgCost)}</span>
-            </div>
-            <div>
-              <span class="text-[10px] text-faint uppercase block">Current Price</span>
-              <span class="font-medium text-ink">${fmtUsd(a.currentPrice)}</span>
-            </div>
-            <div class="text-right sm:text-left">
-              <span class="text-[10px] text-faint uppercase block">P/L (%)</span>
-              <span class="font-semibold ${pnlColor}">${a.pnl != null ? pnlSign + fmtUsd(a.pnl) + ' (' + fmtPct(a.pnlPct) + ')' : '—'}</span>
-            </div>
+          <div class="flex items-center justify-between text-[10px] text-faint pt-0.5">
+            <span>Avg Cost ${fmtUsd(a.avgCost)} &middot; Current ${fmtUsd(a.currentPrice)}</span>
+            <span class="font-semibold ${pnlColor}">${a.pnlPct != null ? fmtPct(a.pnlPct) : '—'}</span>
           </div>
+          <button data-toggle-tx="${a.asset}" class="toggle-tx w-full text-[11px] font-mono font-semibold bg-surface hover:bg-elevated border border-border rounded-lg px-3 py-1.5 transition">
+            ${isOpen ? 'Hide' : 'Show'} ${coinTxs.length} transaction${coinTxs.length === 1 ? '' : 's'} ${isOpen ? '&#9650;' : '&#9660;'}
+          </button>
+          ${isOpen ? buildTxLedgerHtml(coinTxs) : ''}
         </div>`;
     }).join('');
+
+    el.querySelectorAll('.toggle-tx').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const asset = btn.dataset.toggleTx;
+        if (capTxOpen.has(asset)) capTxOpen.delete(asset); else capTxOpen.add(asset);
+        loadHoldings();
+      });
+    });
   } catch (err) {
     el.innerHTML = `<div class="px-4 py-6 text-xs font-mono text-down">${escapeHtml(err.message)}</div>`;
   }
