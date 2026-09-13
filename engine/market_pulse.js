@@ -177,6 +177,44 @@ export function explainMarketPulse(result, context = {}) {
 }
 
 /**
+ * Aligns Market Pulse history against BTC price for the "Market Pulse vs
+ * BTC" chart. Per spec: NOT a common normalized scale — Market Pulse stays
+ * 0-100, BTC becomes a cumulative % return from the window's first point.
+ * Same 2-hour timestamp tolerance as the portfolio benchmark chart (BTC
+ * candles are hourly and dense, so matching FROM each — possibly sparse —
+ * Pulse point TO the nearest BTC candle succeeds even when Pulse points
+ * themselves are irregular).
+ * @param pulsePoints [{ ts, market_pulse }] from market_pulse_snapshots
+ * @param btcPoints   [{ ts, close }] from market_observations
+ */
+const MAX_PULSE_BTC_TIME_DELTA_MS = 2 * 3600 * 1000;
+
+export function alignMarketPulseWithBtc(pulsePoints, btcPoints) {
+  const validPulse = (pulsePoints || []).filter((p) => p.market_pulse != null);
+  const validBtc = (btcPoints || []).filter((b) => b.close != null && b.close > 0);
+
+  if (!validPulse.length || !validBtc.length) {
+    return { status: 'INSUFFICIENT_DATA', message: 'No overlapping Market Pulse and BTC price data available.', points: [] };
+  }
+
+  const startTs = validPulse[0].ts;
+  const nearestStartBtc = [...validBtc].sort((a, b) => Math.abs(a.ts - startTs) - Math.abs(b.ts - startTs))[0];
+  if (Math.abs(nearestStartBtc.ts - startTs) > MAX_PULSE_BTC_TIME_DELTA_MS) {
+    return { status: 'INSUFFICIENT_DATA', message: 'No BTC price observation exists within tolerance of the window start.', points: [] };
+  }
+  const baseBtc = nearestStartBtc.close;
+
+  const points = [];
+  for (const p of validPulse) {
+    const nearestBtc = [...validBtc].sort((a, b) => Math.abs(a.ts - p.ts) - Math.abs(b.ts - p.ts))[0];
+    if (!nearestBtc || Math.abs(nearestBtc.ts - p.ts) > MAX_PULSE_BTC_TIME_DELTA_MS) continue;
+    points.push({ ts: p.ts, marketPulse: p.market_pulse, btcCumReturnPct: ((nearestBtc.close - baseBtc) / baseBtc) * 100 });
+  }
+
+  return { status: points.length ? 'OK' : 'INSUFFICIENT_DATA', points };
+}
+
+/**
  * Reconciliation for importing V1's `history` rows into V4's own D1 — mirrors
  * engine/historical_import.js's non-destructive pattern (existing V4 records
  * always win on conflict, exact duplicates skipped, only genuinely new rows

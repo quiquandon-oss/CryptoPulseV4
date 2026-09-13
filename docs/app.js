@@ -76,6 +76,7 @@ function initThemeToggle() {
 // --- Shared nav ---------------------------------------------------------
 const NAV_PAGES = [
   { href: 'index.html', label: 'Dashboard' },
+  { href: 'market-pulse.html', label: 'Market Pulse' },
   { href: 'portfolio.html', label: 'My Assets' },
   { href: 'performance.html', label: 'Performance' },
   { href: 'health.html', label: 'Health' },
@@ -103,7 +104,7 @@ function renderNav(activeHref) {
     document.body.appendChild(bottomNav);
   }
 
-  const isMoreActive = activeHref === 'audit.html' || activeHref === 'settings.html' || activeHref === 'asset.html';
+  const isMoreActive = activeHref === 'audit.html' || activeHref === 'settings.html' || activeHref === 'asset.html' || activeHref === 'market-pulse.html';
 
   bottomNav.innerHTML = `
     <div class="grid grid-cols-5 h-full max-w-lg mx-auto">
@@ -135,6 +136,10 @@ function renderNav(activeHref) {
           <button id="closeMoreNav" class="text-faint hover:text-ink text-sm p-1 font-mono">&times;</button>
         </div>
         <div class="space-y-1 font-mono text-xs">
+          <a href="market-pulse.html" class="flex items-center justify-between p-2.5 rounded bg-accent-soft border border-accent-30 mb-1">
+            <span class="font-medium text-accent">Market Pulse</span>
+            <span class="text-accent">&rarr;</span>
+          </a>
           <p class="text-[10px] text-faint uppercase tracking-wider py-1 font-semibold">Signals & Assets</p>
           <div class="grid grid-cols-3 gap-2">
             <a href="asset.html?asset=BTC" class="flex flex-col items-center justify-center p-2 rounded bg-elevated border border-border hover:border-accent">

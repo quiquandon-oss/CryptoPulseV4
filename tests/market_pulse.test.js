@@ -3,7 +3,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   computeAggregatedRegime, computeCyclePosition, computeHalvingPhase, computeMarketPulse,
-  reconcileV1HistoryImport, classifyAlignment, explainMarketPulse, CYCLE_ATH, HALVING_DATE_MS,
+  reconcileV1HistoryImport, classifyAlignment, explainMarketPulse, alignMarketPulseWithBtc,
+  CYCLE_ATH, HALVING_DATE_MS,
 } from '../engine/market_pulse.js';
 
 // --- computeAggregatedRegime ---
@@ -206,4 +207,30 @@ test('explainMarketPulse: a partial result includes the stated partial reason am
   const r = computeMarketPulse({ sentimentScore0to100: 70 });
   const e = explainMarketPulse(r);
   assert.ok(e.points.includes(r.partialReason));
+});
+
+// --- alignMarketPulseWithBtc ---
+
+test('alignMarketPulseWithBtc: BTC becomes cumulative % return from the window start, Pulse stays 0-100', () => {
+  const pulse = [{ ts: 1000, market_pulse: 60 }, { ts: 2000, market_pulse: 70 }];
+  const btc = [{ ts: 1000, close: 100 }, { ts: 2000, close: 110 }];
+  const { status, points } = alignMarketPulseWithBtc(pulse, btc);
+  assert.equal(status, 'OK');
+  assert.equal(points[0].marketPulse, 60);
+  assert.equal(points[0].btcCumReturnPct, 0, 'first point is the base, 0% return');
+  assert.equal(points[1].marketPulse, 70);
+  assert.ok(Math.abs(points[1].btcCumReturnPct - 10) < 1e-9, 'a 100->110 move is +10%');
+});
+
+test('alignMarketPulseWithBtc: a Pulse point with no BTC observation within 2h tolerance is dropped, not guessed', () => {
+  const pulse = [{ ts: 1000, market_pulse: 60 }, { ts: 1000 + 5 * 3_600_000, market_pulse: 70 }];
+  const btc = [{ ts: 1000, close: 100 }]; // nothing near the second pulse point
+  const { points } = alignMarketPulseWithBtc(pulse, btc);
+  assert.equal(points.length, 1);
+});
+
+test('alignMarketPulseWithBtc: no overlapping data at all returns INSUFFICIENT_DATA, not an empty-but-OK result', () => {
+  const r = alignMarketPulseWithBtc([], []);
+  assert.equal(r.status, 'INSUFFICIENT_DATA');
+  assert.deepEqual(r.points, []);
 });

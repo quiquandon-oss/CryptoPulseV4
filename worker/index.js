@@ -18,7 +18,7 @@ import {
 } from '../engine/portfolio.js';
 import * as portfolio from './portfolio.js';
 import * as marketPulse from './market_pulse.js';
-import { computeAggregatedRegime, computeCyclePosition, computeHalvingPhase, explainMarketPulse, classifyAlignment } from '../engine/market_pulse.js';
+import { computeAggregatedRegime, computeCyclePosition, computeHalvingPhase, explainMarketPulse, classifyAlignment, alignMarketPulseWithBtc } from '../engine/market_pulse.js';
 import { fetchCandles } from './data-source.js';
 
 const CORS_HEADERS = {
@@ -372,7 +372,13 @@ async function handleMarketPulseHistory(env, url) {
   const rangeMs = { '1W': 7, '1M': 30, '3M': 90, '6M': 180, '1Y': 365 }[range];
   const since = rangeMs ? Date.now() - rangeMs * 86_400_000 : 0;
   const points = await marketPulse.getMarketPulseHistory(env.DB, since);
-  return json({ range, points });
+
+  const { results: btcCandles } = await env.DB
+    .prepare('SELECT ts, close FROM market_observations WHERE asset_id = ? AND ts >= ? ORDER BY ts ASC')
+    .bind('BTC', since).all();
+  const btcAlignment = alignMarketPulseWithBtc(points, btcCandles || []);
+
+  return json({ range, points, btcAlignment });
 }
 
 async function handlePortfolioHistory(env, url) {
