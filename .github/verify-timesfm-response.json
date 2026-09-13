@@ -1,0 +1,179 @@
+{
+    "model": "timesfm",
+    "horizonHours": 24,
+    "historyPoints": [
+        {
+            "ts": 1788739199999,
+            "total_value_usd": 3713.1523992776956,
+            "invested_capital_usd": 4061.270467699936,
+            "unrealized_pnl_usd": -348.1180684222404,
+            "unrealized_pnl_pct": -0.08571654392163493,
+            "prices_complete": 1
+        },
+        {
+            "ts": 1788825599999,
+            "total_value_usd": 3611.695933635472,
+            "invested_capital_usd": 4061.2933631318438,
+            "unrealized_pnl_usd": -449.59742949637166,
+            "unrealized_pnl_pct": -0.11070301731408713,
+            "prices_complete": 1
+        },
+        {
+            "ts": 1788911999999,
+            "total_value_usd": 3564.908882354925,
+            "invested_capital_usd": 4061.2933631318438,
+            "unrealized_pnl_usd": -496.38448077691874,
+            "unrealized_pnl_pct": -0.12222325165748052,
+            "prices_complete": 1
+        },
+        {
+            "ts": 1788998399999,
+            "total_value_usd": 3458.3957005677344,
+            "invested_capital_usd": 4063.582860169755,
+            "unrealized_pnl_usd": -605.1871596020205,
+            "unrealized_pnl_pct": -0.14892944980497802,
+            "prices_complete": 1
+        },
+        {
+            "ts": 1789084799999,
+            "total_value_usd": 3379.965141694287,
+            "invested_capital_usd": 4075.762855169755,
+            "unrealized_pnl_usd": -695.7977134754678,
+            "unrealized_pnl_pct": -0.1707159464866579,
+            "prices_complete": 1
+        },
+        {
+            "ts": 1789171199999,
+            "total_value_usd": 3411.4992896711365,
+            "invested_capital_usd": 4075.762855169755,
+            "unrealized_pnl_usd": -664.2635654986184,
+            "unrealized_pnl_pct": -0.16297895365920448,
+            "prices_complete": 1
+        },
+        {
+            "ts": 1789212232214,
+            "total_value_usd": 3373.722422522532,
+            "invested_capital_usd": 4075.762855169755,
+            "unrealized_pnl_usd": -702.040432647223,
+            "unrealized_pnl_pct": -0.17224761537751027,
+            "prices_complete": 1
+        },
+        {
+            "ts": 1789212769984,
+            "total_value_usd": 3374.7542105096113,
+            "invested_capital_usd": 4075.762855169755,
+            "unrealized_pnl_usd": -701.0086446601435,
+            "unrealized_pnl_pct": -0.17199446326249682,
+            "prices_complete": 1
+        },
+        {
+            "ts": 1789221561861,
+            "total_value_usd": 3378.888860802256,
+            "invested_capital_usd": 4075.762855169755,
+            "unrealized_pnl_usd": -696.8739943674987,
+            "unrealized_pnl_pct": -0.1709800150623518,
+            "prices_complete": 1
+        },
+        {
+            "ts": 1789229347073,
+            "total_value_usd": 3420.4770964984828,
+            "invested_capital_usd": 4075.762855169755,
+            "unrealized_pnl_usd": -655.2857586712721,
+            "unrealized_pnl_pct": -0.16077622323882226,
+            "prices_complete": 1
+        },
+        {
+            "ts": 1789232139563,
+            "total_value_usd": 3413.537798465274,
+            "invested_capital_usd": 4075.762855169755,
+            "unrealized_pnl_usd": -662.2250567044807,
+            "unrealized_pnl_pct": -0.16247879973303775,
+            "prices_complete": 1
+        },
+        {
+            "ts": 1789240098926,
+            "total_value_usd": 3409.1095390886426,
+            "invested_capital_usd": 4075.762855169755,
+            "unrealized_pnl_usd": -666.6533160811123,
+            "unrealized_pnl_pct": -0.16356528575638787,
+            "prices_complete": 1
+        },
+        {
+            "ts": 1789251005768,
+            "total_value_usd": 3406.0505024091035,
+            "invested_capital_usd": 4075.762855169755,
+            "unrealized_pnl_usd": -669.7123527606514,
+            "unrealized_pnl_pct": -0.16431582909961967,
+            "prices_complete": 1
+        },
+        {
+            "ts": 1789255272860,
+            "total_value_usd": 3405.3424273158403,
+            "invested_capital_usd": 4075.762855169755,
+            "unrealized_pnl_usd": -670.4204278539146,
+            "unrealized_pnl_pct": -0.16448955733613008,
+            "prices_complete": 1
+        },
+        {
+            "ts": 1789260507150,
+            "total_value_usd": 3405.177282034744,
+            "invested_capital_usd": 4075.762855169755,
+            "unrealized_pnl_usd": -670.5855731350107,
+            "unrealized_pnl_pct": -0.1645300762001966,
+            "prices_complete": 1
+        },
+        {
+            "ts": 1789270671015,
+            "total_value_usd": 3402.8420395389385,
+            "invested_capital_usd": 4075.762855169755,
+            "unrealized_pnl_usd": -672.9208156308164,
+            "unrealized_pnl_pct": -0.16510303458339687,
+            "prices_complete": 1
+        },
+        {
+            "ts": 1789278970627,
+            "total_value_usd": 3415.329244140367,
+            "invested_capital_usd": 4075.762855169755,
+            "unrealized_pnl_usd": -660.433611029388,
+            "unrealized_pnl_pct": -0.16203926344529213,
+            "prices_complete": 1
+        },
+        {
+            "ts": 1789286680227,
+            "total_value_usd": 3394.847572538417,
+            "invested_capital_usd": 4075.762855169755,
+            "unrealized_pnl_usd": -680.915282631338,
+            "unrealized_pnl_pct": -0.1670644997825758,
+            "prices_complete": 1
+        }
+    ],
+    "funnel": {
+        "currentValue": 3354.725399992403,
+        "p25Value": 3358.272770553907,
+        "medianValue": 3358.272770553907,
+        "p75Value": 3358.272770553907,
+        "coverage": {
+            "modeledAssets": [
+                "BTC"
+            ],
+            "flatAssets": [
+                "ETH",
+                "LINK",
+                "SOL",
+                "HYPE"
+            ],
+            "coveragePct": 0.4500271358136862
+        },
+        "methodologyNote": "Each modeled asset\u2019s own predicted range is summed independently, assuming every asset hits its own best/worst case at the same time \u2014 this likely widens the band beyond what a true correlation-aware portfolio estimate would show. Assets with no prediction model are held at today\u2019s price, not assumed to move."
+    },
+    "sufficiency": {
+        "sufficient": false,
+        "resolvedCount": 13,
+        "accuracy": 0.38461538461538464,
+        "message": "Insufficient data \u2014 only 13 resolved predictions (need 20+ for a reliable accuracy read)."
+    },
+    "isPointForecastOnly": true,
+    "targetTs": 1789290061835,
+    "predictionTs": 1789213324371,
+    "coverageNote": "TimesFM has only ever been run for BTC \u2014 ETH, LINK, SOL, and HYPE are all held at today\u2019s price in this projection, not modeled."
+}
