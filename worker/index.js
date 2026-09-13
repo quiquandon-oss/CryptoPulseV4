@@ -367,10 +367,24 @@ async function handleMarketPulseCurrent(env) {
   });
 }
 
+// Sub-day ranges need ms precision, not the day-only mapping the other
+// history endpoints use — kept as its own explicit table rather than a
+// days*86_400_000 multiply so 12H isn't forced to round to a whole day.
+const MARKET_PULSE_RANGE_MS = {
+  '12H': 12 * 3_600_000,
+  '1D': 24 * 3_600_000,
+  '3D': 3 * 24 * 3_600_000,
+  '1W': 7 * 24 * 3_600_000,
+  '1M': 30 * 24 * 3_600_000,
+  '3M': 90 * 24 * 3_600_000,
+  '6M': 180 * 24 * 3_600_000,
+  '1Y': 365 * 24 * 3_600_000,
+};
+
 async function handleMarketPulseHistory(env, url) {
   const range = url.searchParams.get('range') || '3M'; // spec: default 3M
-  const rangeMs = { '1W': 7, '1M': 30, '3M': 90, '6M': 180, '1Y': 365 }[range];
-  const since = rangeMs ? Date.now() - rangeMs * 86_400_000 : 0;
+  const rangeMs = MARKET_PULSE_RANGE_MS[range];
+  const since = rangeMs ? Date.now() - rangeMs : 0;
   const points = await marketPulse.getMarketPulseHistory(env.DB, since);
 
   const { results: btcCandles } = await env.DB

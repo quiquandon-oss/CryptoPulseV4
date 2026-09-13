@@ -61,8 +61,8 @@
         </div>
         <div id="mpAlignmentBadge" class="mt-2"></div>
       </div>
-      <div class="flex items-center gap-2 sm:flex-col sm:items-end">
-        <div id="mpRangeButtons" class="flex gap-1 overflow-x-auto no-scrollbar"></div>
+      <div class="flex items-center gap-2 sm:flex-col sm:items-end min-w-0">
+        <div id="mpRangeButtons" class="flex gap-1 overflow-x-auto no-scrollbar min-w-0"></div>
         <div id="mpChartExpand"></div>
       </div>
     </div>
@@ -105,11 +105,11 @@
 
 </div>
 
-<script src="app.js?v=2026091207"></script>
+<script src="app.js?v=2026091208"></script>
 <script>
 renderNav('market-pulse.html');
 
-const mpRanges = ['1W', '1M', '3M', '6M', '1Y', 'ALL'];
+const mpRanges = ['12H', '1D', '3D', '1W', '1M', '3M', '6M', '1Y', 'ALL'];
 let mpActiveRange = '3M'; // spec-mandated default
 
 function renderMpRangeButtons() {
