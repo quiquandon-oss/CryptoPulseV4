@@ -21,6 +21,50 @@ async function v4Fetch(path) {
 const FRESHNESS_DOT = { LIVE: 'bg-up', RECENT: 'bg-up', STALE: 'bg-recent', UNAVAILABLE: 'bg-stale', OK: 'bg-up', ERROR: 'bg-stale' };
 const DIRECTION_COLOR = { BULLISH: 'text-up', BEARISH: 'text-down', NEUTRAL: 'text-muted' };
 
+// --- Shared: smooth curves for every line chart ---------------------------
+// Catmull-Rom -> cubic Bezier conversion (tension 1/6, the standard factor).
+// Straight polyline segments are the single biggest visual cue that reads as
+// "spreadsheet" rather than "app" — this one helper, used everywhere a line
+// chart draws its series, is what makes every chart in the app read as one
+// consistent, deliberate visual language instead of assembled one-off SVGs.
+function smoothPathD(pts) {
+  if (!pts.length) return '';
+  if (pts.length === 1) return `M${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)}`;
+  if (pts.length === 2) return `M${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)} L${pts[1].x.toFixed(1)},${pts[1].y.toFixed(1)}`;
+  let d = `M${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] || pts[i];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[i + 2] || p2;
+    const c1x = p1.x + (p2.x - p0.x) / 6, c1y = p1.y + (p2.y - p0.y) / 6;
+    const c2x = p2.x - (p3.x - p1.x) / 6, c2y = p2.y - (p3.y - p1.y) / 6;
+    d += ` C${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`;
+  }
+  return d;
+}
+
+/** Same smooth line, closed down to a baseline y for a gradient area fill. */
+function smoothFillPathD(pts, baselineY) {
+  if (pts.length < 2) return '';
+  const line = smoothPathD(pts);
+  return `${line} L${pts[pts.length - 1].x.toFixed(1)},${baselineY.toFixed(1)} L${pts[0].x.toFixed(1)},${baselineY.toFixed(1)} Z`;
+}
+
+/** A soft glow filter def, reserved for the "wow" screens (Dashboard, Market Pulse) per the Option C split. */
+function glowFilterDefs(id, color) {
+  return `<filter id="${id}" x="-50%" y="-50%" width="200%" height="200%">
+    <feGaussianBlur stdDeviation="4" result="blur"/>
+    <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>`;
+}
+
+/** The pulsing "live" marker — only ever called when freshness genuinely says LIVE/RECENT, never on stale or backfilled data. */
+function livePulseMarker(x, y, color) {
+  return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4" fill="${color}" class="live-pulse-dot"/>
+    <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4" fill="none" stroke="${color}" stroke-width="1.5" class="live-pulse-ring"/>`;
+}
+
 function fmtAge(ms) {
   if (ms == null) return 'no data';
   const min = Math.round(ms / 60000);
@@ -222,7 +266,6 @@ function wireChartTooltip(container, viewBoxW, viewBoxH, xPositions, formatFn) {
   if (!tooltip) {
     tooltip = document.createElement('div');
     tooltip.className = 'chart-tooltip absolute pointer-events-none z-10 bg-elevated border border-border rounded-md px-2 py-1 text-[10px] font-mono text-ink shadow-sm';
-    tooltip.style.display = 'none';
     container.appendChild(tooltip);
   }
 
@@ -256,18 +299,18 @@ function wireChartTooltip(container, viewBoxW, viewBoxH, xPositions, formatFn) {
     }
 
     tooltip.innerHTML = `<div class="font-semibold text-ink">${info.value}</div><div class="text-faint">${info.label}</div>`;
-    tooltip.style.display = 'block';
     const pxPerViewBoxUnit = rect.width / viewBoxW;
     const tooltipWidth = tooltip.offsetWidth || 90;
     let leftPx = vx * pxPerViewBoxUnit - tooltipWidth / 2;
     leftPx = Math.min(Math.max(leftPx, 2), rect.width - tooltipWidth - 2);
     tooltip.style.left = `${leftPx}px`;
     tooltip.style.top = '2px';
+    tooltip.classList.add('tooltip-visible');
   }
   function hide() {
     guide.style.display = 'none';
     dot.style.display = 'none';
-    tooltip.style.display = 'none';
+    tooltip.classList.remove('tooltip-visible');
   }
 
   svg.style.touchAction = 'pan-y';
@@ -278,21 +321,13 @@ function wireChartTooltip(container, viewBoxW, viewBoxH, xPositions, formatFn) {
   svg.addEventListener('touchend', hide);
 }
 
-function renderPortfolioValueChart(container, points) {
+function renderPortfolioValueChart(container, points, opts = {}) {
   const valid = (points || []).filter((p) => p.total_value_usd != null);
   if (valid.length < 2) {
     renderDataState(container, 'INSUFFICIENT_DATA', 'No verified portfolio snapshots prior to April 2026.');
     return;
   }
   const W = 600, H = 220, pad = 12;
-  // Scale to total_value_usd's OWN range, not combined with invested_capital_usd.
-  // Invested capital is often far from current value (e.g. a portfolio down
-  // 20%) — sharing one axis compresses the more interesting value line down
-  // to a sliver near one edge, regardless of how many points there are.
-  // The invested line still plots on this same scale; a <clipPath> keeps it
-  // cleanly invisible outside the plot area instead of relying on the SVG's
-  // own edge clipping, which drew a confusing partial line when a run of
-  // points sat right at the boundary.
   const vals = valid.map((p) => p.total_value_usd);
   const rawMin = Math.min(...vals), rawMax = Math.max(...vals);
   const breathing = (rawMax - rawMin) * 0.12 || Math.abs(rawMax) * 0.02 || 1;
@@ -302,21 +337,19 @@ function renderPortfolioValueChart(container, points) {
   const x = (i) => pad + (i / (n - 1)) * (W - pad * 2);
   const y = (v) => H - pad - ((v - min) / range) * (H - pad * 2);
 
-  const valueLine = valid.map((p, i) => `${x(i).toFixed(1)},${y(p.total_value_usd).toFixed(1)}`).join(' ');
+  const valuePts = valid.map((p, i) => ({ x: x(i), y: y(p.total_value_usd) }));
   const investedPoints = valid.filter((p) => p.invested_capital_usd != null);
-  const investedLine = investedPoints.map((p) => `${x(valid.indexOf(p)).toFixed(1)},${y(p.invested_capital_usd).toFixed(1)}`).join(' ');
+  const investedPts = investedPoints.map((p) => ({ x: x(valid.indexOf(p)), y: y(p.invested_capital_usd) }));
   const lastInvested = investedPoints[investedPoints.length - 1]?.invested_capital_usd;
   const investedOffScale = lastInvested != null && (lastInvested < min || lastInvested > max);
   const clipId = `plotclip-${Math.random().toString(36).slice(2, 9)}`;
   const gradId = `plotgrad-${Math.random().toString(36).slice(2, 9)}`;
 
-  // Colored by the trend WITHIN the displayed range (matching V1: a 24H
-  // view that happens to be net-up shows green even if lifetime P&L is
-  // negative) — not by the account's overall P&L, which the header
-  // elsewhere already shows.
   const trendUp = vals[vals.length - 1] >= vals[0];
   const lineColor = trendUp ? 'var(--up)' : 'var(--down)';
-  const fillPath = `M${x(0).toFixed(1)},${(H - pad).toFixed(1)} L${valueLine.split(' ').join(' L')} L${x(n - 1).toFixed(1)},${(H - pad).toFixed(1)} Z`;
+  const fillPath = smoothFillPathD(valuePts, H - pad);
+  const lastPt = valuePts[valuePts.length - 1];
+  const showPulse = !!(opts.showLivePulse && opts.isLive);
 
   container.innerHTML = `
     <svg viewBox="0 0 ${W} ${H}" class="w-full h-auto">
@@ -328,8 +361,9 @@ function renderPortfolioValueChart(container, points) {
         </linearGradient>
       </defs>
       <path d="${fillPath}" fill="url(#${gradId})" clip-path="url(#${clipId})"/>
-      ${investedLine ? `<polyline points="${investedLine}" fill="none" stroke="var(--faint)" stroke-width="1.5" stroke-dasharray="4 3" clip-path="url(#${clipId})"/>` : ''}
-      <polyline points="${valueLine}" fill="none" stroke="${lineColor}" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round"/>
+      ${investedPts.length ? `<path d="${smoothPathD(investedPts)}" fill="none" stroke="var(--faint)" stroke-width="1.5" stroke-dasharray="4 3" clip-path="url(#${clipId})"/>` : ''}
+      <path d="${smoothPathD(valuePts)}" fill="none" stroke="${lineColor}" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round"/>
+      ${showPulse ? livePulseMarker(lastPt.x, lastPt.y, lineColor) : ''}
     </svg>
     <div class="flex justify-between items-center text-[10px] font-mono text-faint mt-1 px-1">
       <span>${new Date(valid[0].ts).toLocaleDateString()}</span>
@@ -367,11 +401,11 @@ function renderCumulativePnlChart(container, points) {
   const zeroY = y(0);
   const zeroInRange = zeroY >= pad && zeroY <= H - pad;
 
-  const pnlPoints = valid.map((p, i) => `${x(i).toFixed(1)},${y(p.unrealized_pnl_usd).toFixed(1)}`).join(' ');
+  const pnlPts = valid.map((p, i) => ({ x: x(i), y: y(p.unrealized_pnl_usd) }));
   const lastPnl = pnls[pnls.length - 1];
   const strokeColor = lastPnl >= 0 ? 'var(--up)' : 'var(--down)';
   const gradId = `plotgrad-${Math.random().toString(36).slice(2, 9)}`;
-  const fillPath = `M${x(0).toFixed(1)},${(H - pad).toFixed(1)} L${pnlPoints.split(' ').join(' L')} L${x(n - 1).toFixed(1)},${(H - pad).toFixed(1)} Z`;
+  const fillPath = smoothFillPathD(pnlPts, H - pad);
 
   container.innerHTML = `
     <svg viewBox="0 0 ${W} ${H}" class="w-full h-auto">
@@ -383,7 +417,7 @@ function renderCumulativePnlChart(container, points) {
       </defs>
       <path d="${fillPath}" fill="url(#${gradId})"/>
       ${zeroInRange ? `<line x1="${pad}" y1="${zeroY}" x2="${W - pad}" y2="${zeroY}" stroke="var(--border-strong)" stroke-width="1" stroke-dasharray="2 2" />` : ''}
-      <polyline points="${pnlPoints}" fill="none" stroke="${strokeColor}" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="${smoothPathD(pnlPts)}" fill="none" stroke="${strokeColor}" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round"/>
     </svg>
     <div class="flex justify-between items-center text-[10px] font-mono text-faint mt-1 px-1">
       <span>${new Date(valid[0].ts).toLocaleDateString()}</span>
@@ -412,12 +446,12 @@ function renderAllocationDonut(container, allocation) {
   const circles = filtered.map((a, i) => {
     const frac = a.value / total;
     const dash = frac * C;
-    const circle = `<circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="${colors[i % colors.length]}" stroke-width="20" stroke-dasharray="${dash.toFixed(2)} ${(C - dash).toFixed(2)}" stroke-dashoffset="${(-offset).toFixed(2)}"/>`;
+    const circle = `<circle data-asset="${a.asset}" class="donut-slice" cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="${colors[i % colors.length]}" stroke-width="20" stroke-dasharray="${dash.toFixed(2)} ${(C - dash).toFixed(2)}" stroke-dashoffset="${(-offset).toFixed(2)}"/>`;
     offset += dash;
     return circle;
   }).join('');
   const legend = filtered.map((a, i) => `
-    <a href="asset.html?asset=${a.asset}" class="flex items-center gap-2 text-xs font-mono hover-text-muted">
+    <a href="asset.html?asset=${a.asset}" data-asset="${a.asset}" class="donut-legend-item flex items-center gap-2 text-xs font-mono hover-text-muted">
       <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${colors[i % colors.length]}"></span>
       <span class="font-medium">${a.asset}</span>
       <span class="text-faint">${((a.allocationPct ?? 0) * 100).toFixed(1)}%</span>
@@ -427,6 +461,22 @@ function renderAllocationDonut(container, allocation) {
       <svg viewBox="0 0 160 160" class="w-32 h-32 shrink-0" style="transform: rotate(-90deg)">${circles}</svg>
       <div class="flex flex-col gap-2">${legend}</div>
     </div>`;
+
+  const slices = container.querySelectorAll('.donut-slice');
+  const legendItems = container.querySelectorAll('.donut-legend-item');
+  const setActive = (asset) => {
+    slices.forEach((s) => {
+      const match = !asset || s.dataset.asset === asset;
+      s.style.opacity = match ? '1' : '0.3';
+      s.style.strokeWidth = asset && match ? '23' : '20';
+    });
+    legendItems.forEach((l) => l.style.opacity = (!asset || l.dataset.asset === asset) ? '1' : '0.5');
+  };
+  [...slices, ...legendItems].forEach((el) => {
+    el.addEventListener('mouseenter', () => setActive(el.dataset.asset));
+    el.addEventListener('mouseleave', () => setActive(null));
+    el.addEventListener('touchstart', () => setActive(el.dataset.asset), { passive: true });
+  });
 }
 
 // --- Visualization 4: Asset Performance Comparison ---------------------
@@ -471,14 +521,24 @@ function renderBenchmarkChart(container, benchmarkData) {
   const x = (i) => pad + (i / (n - 1)) * (W - pad * 2);
   const y = (v) => H - pad - ((v - min) / range) * (H - pad * 2);
 
-  const portLine = points.map((p, i) => `${x(i).toFixed(1)},${y(p.portfolioNormalized).toFixed(1)}`).join(' ');
+  const portPts = points.map((p, i) => ({ x: x(i), y: y(p.portfolioNormalized) }));
   const btcPoints = points.filter((p) => p.btcNormalized != null);
-  const btcLine = btcPoints.map((p) => `${x(points.indexOf(p)).toFixed(1)},${y(p.btcNormalized).toFixed(1)}`).join(' ');
+  const btcPts = btcPoints.map((p) => ({ x: x(points.indexOf(p)), y: y(p.btcNormalized) }));
+  const gradId = `plotgrad-${Math.random().toString(36).slice(2, 9)}`;
+  const trendUp = points[n - 1].portfolioNormalized >= points[0].portfolioNormalized;
+  const fillColor = trendUp ? 'var(--up)' : 'var(--down)';
 
   container.innerHTML = `
     <svg viewBox="0 0 ${W} ${H}" class="w-full h-auto">
-      ${btcLine ? `<polyline points="${btcLine}" fill="none" stroke="var(--warn)" stroke-width="1.5" stroke-dasharray="3 3"/>` : ''}
-      <polyline points="${portLine}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <defs>
+        <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${fillColor}" stop-opacity="0.22"/>
+          <stop offset="100%" stop-color="${fillColor}" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <path d="${smoothFillPathD(portPts, H - pad)}" fill="url(#${gradId})"/>
+      ${btcPts.length ? `<path d="${smoothPathD(btcPts)}" fill="none" stroke="var(--warn)" stroke-width="1.5" stroke-dasharray="3 3"/>` : ''}
+      <path d="${smoothPathD(portPts)}" fill="none" stroke="var(--accent)" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round"/>
     </svg>
     <div class="flex justify-between items-center text-[10px] font-mono text-faint mt-1 px-1">
       <span>${new Date(points[0].ts).toLocaleDateString()} (Base=100)</span>
@@ -521,7 +581,8 @@ function renderPriceSignalChart(container, points, requestedRange = null) {
   const x = (i) => pad + (i / (n - 1)) * (W - pad * 2);
   const yPrice = (p) => priceH - pad - ((p - minP) / rangeP) * (priceH - pad * 2);
 
-  const pricePoints = points.map((p, i) => (p.price != null ? `${x(i).toFixed(1)},${yPrice(p.price).toFixed(1)}` : null)).filter(Boolean).join(' ');
+  const pricePts = points.map((p, i) => (p.price != null ? { x: x(i), y: yPrice(p.price) } : null)).filter(Boolean);
+  const gradId = `plotgrad-${Math.random().toString(36).slice(2, 9)}`;
 
   const maxScore = Math.max(6, ...points.map((p) => Math.abs(p.score || 0)));
   const barW = Math.max(1.5, ((W - pad * 2) / n) * 0.6);
@@ -542,7 +603,14 @@ function renderPriceSignalChart(container, points, requestedRange = null) {
   container.innerHTML = `
     <p class="text-[10px] text-faint mb-1 px-1">Top: hourly price. Bottom: signal strength each cycle (green=bullish, red=bearish, gray=neutral) &mdash; taller bar means stronger conviction, not bigger price move.</p>
     <svg viewBox="0 0 ${W} ${H}" class="w-full h-auto">
-      <polyline points="${pricePoints}" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" />
+      <defs>
+        <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.18"/>
+          <stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <path d="${smoothFillPathD(pricePts, priceH - pad)}" fill="url(#${gradId})"/>
+      <path d="${smoothPathD(pricePts)}" fill="none" stroke="var(--accent)" stroke-width="1.75" stroke-linejoin="round" stroke-linecap="round" />
       <line x1="${pad}" y1="${scoreMid}" x2="${W - pad}" y2="${scoreMid}" stroke="var(--border)" stroke-width="1" />
       ${bars}
     </svg>
@@ -574,13 +642,15 @@ function ensureFullscreenModal() {
   if (modal) return modal;
   modal = document.createElement('div');
   modal.id = 'chartFullscreenModal';
-  modal.className = 'fixed inset-0 z-50 hidden items-center justify-center p-3 sm:p-6';
+  modal.className = 'fixed inset-0 z-50 hidden items-center justify-center';
   modal.style.background = 'rgba(0,0,0,0.6)';
   modal.innerHTML = `
-    <div class="bg-surface border border-border rounded-xl p-4 sm:p-6 w-full max-w-3xl max-h-[90vh] overflow-auto relative">
-      <button id="chartFullscreenClose" class="absolute top-3 right-3 text-faint hover-text-ink text-lg leading-none w-7 h-7 flex items-center justify-center rounded hover-bg-elevated" aria-label="Close">&#10005;</button>
-      <h3 id="chartFullscreenTitle" class="text-xs font-mono font-semibold text-faint uppercase tracking-wider mb-4 pr-8"></h3>
-      <div id="chartFullscreenBody"></div>
+    <div class="fs-card bg-surface overflow-auto relative flex flex-col">
+      <div class="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
+        <h3 id="chartFullscreenTitle" class="text-xs font-mono font-semibold text-faint uppercase tracking-wider"></h3>
+        <button id="chartFullscreenClose" class="text-faint hover-text-ink w-9 h-9 flex items-center justify-center rounded hover-bg-elevated text-lg leading-none touch-target" aria-label="Close">&#10005;</button>
+      </div>
+      <div id="chartFullscreenBody" class="p-4 flex-1 flex flex-col justify-center"></div>
     </div>`;
   document.body.appendChild(modal);
   modal.addEventListener('click', (e) => { if (e.target === modal) closeChartFullscreen(); });
@@ -612,7 +682,7 @@ const EXPAND_ICON_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="n
 function addFullscreenButton(buttonContainerId, title, renderFn, ...args) {
   const el = document.getElementById(buttonContainerId);
   if (!el) return;
-  el.innerHTML = `<button class="text-faint hover-text-ink p-1.5 rounded hover-bg-elevated" aria-label="Expand chart" title="Expand">${EXPAND_ICON_SVG}</button>`;
+  el.innerHTML = `<button class="touch-target text-faint hover-text-ink rounded hover-bg-elevated" aria-label="Expand chart" title="Expand">${EXPAND_ICON_SVG}</button>`;
   el.querySelector('button').addEventListener('click', () => openChartFullscreen(title, renderFn, ...args));
 }
 
@@ -631,12 +701,15 @@ function renderMarketPulseGauge(container, marketPulse, label, regimeText) {
   const color = label === 'BULLISH' ? 'var(--up)' : label === 'BEARISH' ? 'var(--down)' : 'var(--warn)';
   const startX = cx - r, endX = cx + r;
 
+  const glowId = `glow-${Math.random().toString(36).slice(2, 9)}`;
+
   container.innerHTML = `
     <div class="flex flex-col items-center">
       <svg viewBox="0 0 ${W} ${H}" class="w-full max-w-[260px] h-auto">
+        <defs>${glowFilterDefs(glowId, color)}</defs>
         <path d="M${startX},${cy} A${r},${r} 0 0,1 ${endX},${cy}" fill="none" stroke="var(--border)" stroke-width="14" stroke-linecap="round"/>
         <path d="M${startX},${cy} A${r},${r} 0 0,1 ${endX},${cy}" fill="none" stroke="${color}" stroke-width="14" stroke-linecap="round"
-          stroke-dasharray="${fillLength.toFixed(1)} ${fullLength.toFixed(1)}"/>
+          stroke-dasharray="${fillLength.toFixed(1)} ${fullLength.toFixed(1)}" filter="url(#${glowId})" opacity="0.95"/>
       </svg>
       <div class="-mt-10 text-center">
         <div class="text-4xl font-mono font-bold text-ink">${marketPulse}</div>
@@ -672,24 +745,36 @@ function renderRegimeTimeline(container, regimeRows, asset = 'BTC') {
 
   container.innerHTML = `
     <div class="flex h-6 rounded-md overflow-hidden border border-border">
-      ${segments.map((s) => {
+      ${segments.map((s, i) => {
         const width = spanMs > 0 ? Math.max(2, ((s.endTs - s.startTs) / spanMs) * 100) : 100 / segments.length;
-        return `<div style="width:${width}%; background:${REGIME_COLOR[s.regime] || 'var(--faint)'}" title="${s.regime}"></div>`;
+        return `<div data-seg="${i}" class="regime-segment" style="width:${width}%; background:${REGIME_COLOR[s.regime] || 'var(--faint)'}"></div>`;
       }).join('')}
     </div>
     <div class="flex justify-between text-[10px] font-mono text-faint mt-1">
       <span>${fmtDate(segments[0].startTs)}</span>
       <span>${fmtDate(segments[segments.length - 1].endTs)}</span>
     </div>
+    <div id="regimeSegDetail" class="text-[10px] font-mono text-ink bg-elevated border border-border rounded px-2 py-1.5 mt-2 hidden"></div>
     <div class="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-[10px] font-mono">
       ${[...new Set(segments.map((s) => s.regime))].map((r) => `<span class="flex items-center gap-1"><span class="w-2 h-2 rounded-sm inline-block" style="background:${REGIME_COLOR[r] || 'var(--faint)'}"></span>${r.replaceAll('_', ' ')}</span>`).join('')}
     </div>
     ${spanMs < 24 * 3_600_000 ? `<p class="text-[10px] text-faint mt-2">Only ${(spanMs / 3_600_000).toFixed(0)}h of ${asset} regime history exists so far — this timeline will fill in as more hourly cycles run.</p>` : ''}`;
+
+  // title= never fires on touch devices — tapping a segment shows the same
+  // detail (regime + date range) as a real, visible row instead.
+  const detailEl = container.querySelector('#regimeSegDetail');
+  container.querySelectorAll('.regime-segment').forEach((el) => {
+    el.addEventListener('click', () => {
+      const s = segments[Number(el.dataset.seg)];
+      detailEl.textContent = `${s.regime.replaceAll('_', ' ')} \u00b7 ${fmtDate(s.startTs)} \u2013 ${fmtDate(s.endTs)}`;
+      detailEl.classList.remove('hidden');
+    });
+  });
 }
 // Deliberately NOT one shared normalized scale (spec: "do not create a
 // misleading common normalized scale") — Market Pulse keeps its native
 // 0-100 range, BTC is cumulative % return from the window start.
-function renderMarketPulseBtcChart(container, btcAlignment) {
+function renderMarketPulseBtcChart(container, btcAlignment, isLive = false) {
   const points = btcAlignment?.points || [];
   if (points.length < 2) {
     renderDataState(container, 'INSUFFICIENT_DATA', btcAlignment?.message || 'Not enough overlapping Market Pulse and BTC data yet.');
@@ -703,7 +788,7 @@ function renderMarketPulseBtcChart(container, btcAlignment) {
 
   // Top panel: Market Pulse, fixed 0-100 scale (it's inherently bounded).
   const yPulse = (v) => pulseH - 10 - (v / 100) * (pulseH - 20);
-  const pulseLine = points.map((p, i) => `${x(i).toFixed(1)},${yPulse(p.marketPulse).toFixed(1)}`).join(' ');
+  const pulsePts = points.map((p, i) => ({ x: x(i), y: yPulse(p.marketPulse) }));
 
   // Bottom panel: BTC cumulative return, own auto-range, zero-line shown when in range.
   const btcVals = points.map((p) => p.btcCumReturnPct);
@@ -712,18 +797,37 @@ function renderMarketPulseBtcChart(container, btcAlignment) {
   const bMin = btcMin - btcBreath, bMax = btcMax + btcBreath;
   const bRange = (bMax - bMin) || 1;
   const yBtc = (v) => pulseH + gap + btcH - 8 - ((v - bMin) / bRange) * (btcH - 16);
-  const btcLine = points.map((p, i) => `${x(i).toFixed(1)},${yBtc(p.btcCumReturnPct).toFixed(1)}`).join(' ');
+  const btcPts = points.map((p, i) => ({ x: x(i), y: yBtc(p.btcCumReturnPct) }));
   const zeroY = yBtc(0);
   const zeroInRange = zeroY >= pulseH + gap && zeroY <= pulseH + gap + btcH;
   const lastBtc = btcVals[btcVals.length - 1];
+  const btcColor = lastBtc >= 0 ? 'var(--up)' : 'var(--down)';
+  const pulseGradId = `plotgrad-${Math.random().toString(36).slice(2, 9)}`;
+  const btcGradId = `plotgrad-${Math.random().toString(36).slice(2, 9)}`;
+  const lastPulsePt = pulsePts[pulsePts.length - 1];
+  const lastBtcPt = btcPts[btcPts.length - 1];
 
   container.innerHTML = `
     <svg viewBox="0 0 ${W} ${totalH}" class="w-full h-auto">
+      <defs>
+        <linearGradient id="${pulseGradId}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.25"/>
+          <stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/>
+        </linearGradient>
+        <linearGradient id="${btcGradId}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${btcColor}" stop-opacity="0.2"/>
+          <stop offset="100%" stop-color="${btcColor}" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
       <text x="${padX}" y="10" class="font-mono" font-size="9" fill="var(--faint)">MARKET PULSE (0-100)</text>
-      <polyline points="${pulseLine}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="${smoothFillPathD(pulsePts, pulseH - 10)}" fill="url(#${pulseGradId})"/>
+      <path d="${smoothPathD(pulsePts)}" fill="none" stroke="var(--accent)" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round"/>
+      ${isLive ? livePulseMarker(lastPulsePt.x, lastPulsePt.y, 'var(--accent)') : ''}
       <text x="${padX}" y="${pulseH + gap + 8}" class="font-mono" font-size="9" fill="var(--faint)">BTC CUMULATIVE RETURN FROM PERIOD START</text>
       ${zeroInRange ? `<line x1="${padX}" y1="${zeroY}" x2="${W - padX}" y2="${zeroY}" stroke="var(--border-strong)" stroke-width="1" stroke-dasharray="2 2"/>` : ''}
-      <polyline points="${btcLine}" fill="none" stroke="${lastBtc >= 0 ? 'var(--up)' : 'var(--down)'}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="${smoothFillPathD(btcPts, pulseH + gap + btcH - 8)}" fill="url(#${btcGradId})"/>
+      <path d="${smoothPathD(btcPts)}" fill="none" stroke="${btcColor}" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round"/>
+      ${isLive ? livePulseMarker(lastBtcPt.x, lastBtcPt.y, btcColor) : ''}
     </svg>
     <div class="flex justify-between items-center text-[10px] font-mono text-faint mt-1 px-1">
       <span>${new Date(points[0].ts).toLocaleDateString()}</span>
