@@ -88,7 +88,7 @@
   </section>
 </div>
 
-<script src="app.js?v=2026091214"></script>
+<script src="app.js?v=2026091215"></script>
 <script>
 renderNav('audit.html');
 
@@ -116,8 +116,8 @@ async function loadAuditTelemetry() {
     document.getElementById('auditConflictCount').className = `text-sm font-semibold ${conflictCount > 0 ? 'text-warn' : 'text-up'}`;
 
     if (health.transactions?.earliest) {
-      const earliest = new Date(health.transactions.earliest).toLocaleDateString();
-      const latest = new Date(health.transactions.latest).toLocaleDateString();
+      const earliest = fmtDate(health.transactions.earliest);
+      const latest = fmtDate(health.transactions.latest);
       document.getElementById('auditDetailsText').textContent =
         `Verified portfolio data spans ${earliest} to ${latest} across ${health.bySource.map(s => s.source).join(', ')}. Database import logs record ${conflictCount} OHLCV reconciliation discrepancy conflict(s).`;
     } else {
@@ -134,7 +134,7 @@ async function loadList() {
     listEl.innerHTML = signals.length ? signals.map((s) => `
       <button data-id="${s.id}" class="w-full text-left px-4 py-3 flex items-center justify-between hover-bg-elevated transition-colors font-mono text-xs">
         <span class="font-medium">${s.asset_id} <span class="${DIRECTION_COLOR[s.direction] || 'text-muted'}">${s.direction} ${s.score >= 0 ? '+' : ''}${s.score}</span></span>
-        <span class="text-faint">${new Date(s.ts).toLocaleString()}</span>
+        <span class="text-faint">${fmtDateTime(s.ts)}</span>
       </button>`).join('') : '<div class="px-4 py-6 text-sm font-mono text-faint">No signals recorded.</div>';
 
     listEl.querySelectorAll('button[data-id]').forEach((btn) => {

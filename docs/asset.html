@@ -142,7 +142,7 @@
 
 </div>
 
-<script src="app.js?v=2026091214"></script>
+<script src="app.js?v=2026091215"></script>
 <script>
 renderNav('asset.html');
 
@@ -173,7 +173,7 @@ renderNav('asset.html');
     } else if (s.price != null) {
       document.getElementById('assetPrice').textContent = fmtUsd(s.price);
     } else {
-      document.getElementById('assetPrice').textContent = `Evaluated ${new Date(s.ts).toLocaleTimeString()}`;
+      document.getElementById('assetPrice').textContent = `Evaluated ${fmtTime(s.ts)}`;
     }
 
     if (detail.change24h != null) {

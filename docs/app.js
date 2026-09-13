@@ -83,6 +83,38 @@ function fmtUsd(v) {
   return `$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+// --- Shared date/time formatting — dd/mm/yy everywhere, never left to
+// browser locale. toLocaleDateString() with no options renders MM/DD/YYYY
+// for US visitors and DD/MM/YYYY elsewhere — meaning the SAME chart could
+// show genuinely different, ambiguous date orderings depending on who's
+// looking at it. These three are the only date/time formatters used
+// anywhere in this app; nothing calls toLocaleDateString/toLocaleString/
+// toLocaleTimeString directly.
+function fmtDate(ts) {
+  if (ts == null) return '—';
+  const d = new Date(ts);
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yy = String(d.getFullYear()).slice(-2);
+  return `${dd}/${mm}/${yy}`;
+}
+
+function fmtDateTime(ts) {
+  if (ts == null) return '—';
+  const d = new Date(ts);
+  const hh = String(d.getHours()).padStart(2, '0');
+  const min = String(d.getMinutes()).padStart(2, '0');
+  return `${fmtDate(ts)} ${hh}:${min}`;
+}
+
+function fmtTime(ts) {
+  if (ts == null) return '—';
+  const d = new Date(ts);
+  const hh = String(d.getHours()).padStart(2, '0');
+  const min = String(d.getMinutes()).padStart(2, '0');
+  return `${hh}:${min}`;
+}
+
 function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str ?? '';
@@ -369,14 +401,14 @@ function renderPortfolioValueChart(container, points, opts = {}) {
       ${showPulse ? livePulseMarker(lastPt.x, lastPt.y, lineColor) : ''}
     </svg>
     <div class="flex justify-between items-center ${captionClass(isFullscreen)} font-mono text-faint mt-1 px-1">
-      <span>${new Date(valid[0].ts).toLocaleDateString()}</span>
+      <span>${fmtDate(valid[0].ts)}</span>
       <span><span class="${trendUp ? 'text-up' : 'text-down'}">— </span>value &nbsp; <span class="text-faint">- - </span>invested${investedOffScale ? ` (${fmtUsd(lastInvested)}, off-scale)` : ''}</span>
-      <span>${new Date(valid[n - 1].ts).toLocaleDateString()}</span>
+      <span>${fmtDate(valid[n - 1].ts)}</span>
     </div>`;
 
   wireChartTooltip(container, W, H, valid.map((_, i) => x(i)), (i) => ({
     value: fmtUsd(valid[i].total_value_usd),
-    label: new Date(valid[i].ts).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: n < 40 ? '2-digit' : undefined, minute: n < 40 ? '2-digit' : undefined }),
+    label: n < 40 ? fmtDateTime(valid[i].ts) : fmtDate(valid[i].ts),
     y: y(valid[i].total_value_usd),
   }));
 }
@@ -426,14 +458,14 @@ function renderCumulativePnlChart(container, points) {
       <path d="${smoothPathD(pnlPts)}" fill="none" stroke="${strokeColor}" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round"/>
     </svg>
     <div class="flex justify-between items-center ${captionClass(isFullscreen)} font-mono text-faint mt-1 px-1">
-      <span>${new Date(valid[0].ts).toLocaleDateString()}</span>
+      <span>${fmtDate(valid[0].ts)}</span>
       <span class="${lastPnl >= 0 ? 'text-up' : 'text-down'} font-medium">Net P/L: ${fmtUsd(lastPnl)}</span>
-      <span>${new Date(valid[n - 1].ts).toLocaleDateString()}</span>
+      <span>${fmtDate(valid[n - 1].ts)}</span>
     </div>`;
 
   wireChartTooltip(container, W, H, valid.map((_, i) => x(i)), (i) => ({
     value: `${valid[i].unrealized_pnl_usd >= 0 ? '+' : ''}${fmtUsd(valid[i].unrealized_pnl_usd)}`,
-    label: new Date(valid[i].ts).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: n < 40 ? '2-digit' : undefined, minute: n < 40 ? '2-digit' : undefined }),
+    label: n < 40 ? fmtDateTime(valid[i].ts) : fmtDate(valid[i].ts),
     y: y(valid[i].unrealized_pnl_usd),
   }));
 }
@@ -550,14 +582,14 @@ function renderBenchmarkChart(container, benchmarkData) {
       <path d="${smoothPathD(portPts)}" fill="none" stroke="var(--accent)" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round"/>
     </svg>
     <div class="flex justify-between items-center ${captionClass(isFullscreen)} font-mono text-faint mt-1 px-1">
-      <span>${new Date(points[0].ts).toLocaleDateString()} (Base=100)</span>
+      <span>${fmtDate(points[0].ts)} (Base=100)</span>
       <span><span class="text-accent">— </span>Portfolio &nbsp; <span class="text-warn">- - </span>BTC Benchmark</span>
-      <span>${new Date(points[n - 1].ts).toLocaleDateString()}</span>
+      <span>${fmtDate(points[n - 1].ts)}</span>
     </div>`;
 
   wireChartTooltip(container, W, H, points.map((_, i) => x(i)), (i) => ({
     value: `Portfolio ${points[i].portfolioNormalized.toFixed(1)}${points[i].btcNormalized != null ? ` &middot; BTC ${points[i].btcNormalized.toFixed(1)}` : ''}`,
-    label: new Date(points[i].ts).toLocaleDateString(),
+    label: fmtDate(points[i].ts),
     y: y(points[i].portfolioNormalized),
   }));
 }
@@ -628,9 +660,9 @@ function renderPriceSignalChart(container, points, requestedRange = null) {
       ${bars}
     </svg>
     <div class="flex justify-between font-mono ${captionClass(isFullscreen)} text-faint mt-1 px-1">
-      <span>${new Date(points[0].ts).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit' })}</span>
+      <span>${fmtDateTime(points[0].ts)}</span>
       <span class="text-accent">— price</span>
-      <span>${new Date(points[n - 1].ts).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit' })}</span>
+      <span>${fmtDateTime(points[n - 1].ts)}</span>
     </div>
     ${sparseNote}`;
 
@@ -639,7 +671,7 @@ function renderPriceSignalChart(container, points, requestedRange = null) {
     if (p.price == null) return null;
     return {
       value: `${fmtUsd(p.price)}${p.direction ? ` &middot; ${p.direction} (${p.score >= 0 ? '+' : ''}${p.score})` : ''}`,
-      label: new Date(p.ts).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
+      label: fmtDateTime(p.ts),
       y: yPrice(p.price),
     };
   });
@@ -898,7 +930,6 @@ function renderRegimeTimeline(container, regimeRows, asset = 'BTC') {
     TRANSITION: 'var(--warn)',
   };
   const spanMs = segments[segments.length - 1].endTs - segments[0].startTs;
-  const fmtDate = (ts) => new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
   container.innerHTML = `
     <div class="flex h-6 rounded-md overflow-hidden border border-border">
@@ -1030,14 +1061,14 @@ function renderMarketPulseBtcChart(container, btcAlignment, isLive = false) {
       <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm inline-block border border-border" style="background:color-mix(in srgb, var(--faint) 25%, transparent)"></span><span class="text-faint">Confirmation</span></span>
     </div>
     <div class="flex justify-between items-center ${captionClass(isFullscreen)} font-mono text-faint mt-1 px-1">
-      <span>${new Date(points[0].ts).toLocaleDateString()}</span>
+      <span>${fmtDate(points[0].ts)}</span>
       <span>BTC: ${lastBtc >= 0 ? '+' : ''}${lastBtc.toFixed(1)}%</span>
-      <span>${new Date(points[n - 1].ts).toLocaleDateString()}</span>
+      <span>${fmtDate(points[n - 1].ts)}</span>
     </div>`;
 
   wireChartTooltip(container, W, H, points.map((_, i) => x(i)), (i) => ({
     value: `Pulse ${points[i].marketPulse} &middot; BTC ${points[i].btcCumReturnPct >= 0 ? '+' : ''}${points[i].btcCumReturnPct.toFixed(1)}%${points[i].alignmentLabel ? ` &middot; ${points[i].alignmentLabel}` : ''}`,
-    label: new Date(points[i].ts).toLocaleDateString(),
+    label: fmtDate(points[i].ts),
     y: yPulse(points[i].marketPulse),
   }));
 }
@@ -1222,7 +1253,7 @@ function renderPredictionFunnelChart(container, historyPoints, funnelData) {
     if (i < histPts.length) {
       return {
         value: fmtUsd(hist[i].value),
-        label: new Date(hist[i].ts).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit' }),
+        label: fmtDateTime(hist[i].ts),
         y: histPts[i].y,
       };
     }

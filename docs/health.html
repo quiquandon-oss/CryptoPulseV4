@@ -76,7 +76,7 @@
 
 </div>
 
-<script src="app.js?v=2026091214"></script>
+<script src="app.js?v=2026091215"></script>
 <script>
 renderNav('health.html');
 
@@ -87,7 +87,6 @@ renderNav('health.html');
     if (!h.transactions?.n) {
       el.innerHTML = '<div class="text-xs font-mono text-faint">No portfolio transactions recorded.</div>';
     } else {
-      const fmt = (ts) => ts ? new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
       const snapN = h.snapshots?.n ?? 0;
       el.innerHTML = `
         <p class="text-[10px] text-faint uppercase tracking-wider mb-1.5">Transaction ledger</p>
@@ -98,11 +97,11 @@ renderNav('health.html');
           </div>
           <div class="bg-elevated p-3 rounded-lg border border-border">
             <span class="text-[10px] text-faint uppercase block">Earliest</span>
-            <span class="font-semibold text-xs sm:text-sm text-ink block mt-0.5 truncate">${fmt(h.transactions.earliest)}</span>
+            <span class="font-semibold text-xs sm:text-sm text-ink block mt-0.5 truncate">${fmtDate(h.transactions.earliest)}</span>
           </div>
           <div class="bg-elevated p-3 rounded-lg border border-border">
             <span class="text-[10px] text-faint uppercase block">Latest</span>
-            <span class="font-semibold text-xs sm:text-sm text-ink block mt-0.5 truncate">${fmt(h.transactions.latest)}</span>
+            <span class="font-semibold text-xs sm:text-sm text-ink block mt-0.5 truncate">${fmtDate(h.transactions.latest)}</span>
           </div>
         </div>
         <p class="text-[10px] text-faint uppercase tracking-wider mb-1.5">Equity curve (separate from the ledger above — see note)</p>
@@ -113,11 +112,11 @@ renderNav('health.html');
           </div>
           <div class="bg-elevated p-3 rounded-lg border border-border">
             <span class="text-[10px] text-faint uppercase block">Earliest</span>
-            <span class="font-semibold text-xs sm:text-sm text-ink block mt-0.5 truncate">${fmt(h.snapshots?.earliest)}</span>
+            <span class="font-semibold text-xs sm:text-sm text-ink block mt-0.5 truncate">${fmtDate(h.snapshots?.earliest)}</span>
           </div>
           <div class="bg-elevated p-3 rounded-lg border border-border">
             <span class="text-[10px] text-faint uppercase block">Latest</span>
-            <span class="font-semibold text-xs sm:text-sm text-ink block mt-0.5 truncate">${fmt(h.snapshots?.latest)}</span>
+            <span class="font-semibold text-xs sm:text-sm text-ink block mt-0.5 truncate">${fmtDate(h.snapshots?.latest)}</span>
           </div>
         </div>
         <p class="text-[10px] text-faint mt-2">The ledger goes back to your first transaction; the equity curve only covers however long snapshots have actually been logged — they cover different spans on purpose.</p>`;

@@ -135,7 +135,7 @@
   </footer>
 </div>
 
-<script src="app.js?v=2026091214"></script>
+<script src="app.js?v=2026091215"></script>
 <script>
 renderNav('index.html');
 
@@ -189,7 +189,7 @@ function initHeroChart() {
 
     el.statusDot.className = `w-2 h-2 rounded-full ${isOk ? 'bg-up' : isDegraded ? 'bg-recent' : 'bg-unavailable'}`;
     el.statusLabel.textContent = health.overall;
-    el.lastUpdate.textContent = `Checked ${new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`;
+    el.lastUpdate.textContent = `Checked ${fmtTime(Date.now())}`;
 
     el.bannerDot.className = `w-2.5 h-2.5 rounded-full shrink-0 ${isOk ? 'bg-up' : isDegraded ? 'bg-recent' : 'bg-unavailable'}`;
     el.bannerTitle.textContent = isDegraded ? 'System degraded' : isOk ? 'System healthy' : `System ${health.overall.toLowerCase()}`;

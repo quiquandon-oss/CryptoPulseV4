@@ -186,7 +186,7 @@
 
 </div>
 
-<script src="app.js?v=2026091214"></script>
+<script src="app.js?v=2026091215"></script>
 <script>
 renderNav('portfolio.html');
 
@@ -458,10 +458,9 @@ async function loadHistoryStatus() {
     }
     const earliest = new Date(health.transactions.earliest);
     const latest = new Date(health.transactions.latest);
-    const fmt = (d) => d.toLocaleDateString(undefined, { month: 'short', year: 'numeric', day: 'numeric' });
 
     el.innerHTML = `
-      <p class="font-medium text-ink">${fmt(earliest)} → ${fmt(latest)}</p>
+      <p class="font-medium text-ink">${fmtDate(earliest)} → ${fmtDate(latest)}</p>
       <p class="text-[11px] text-faint">${health.transactions.n} verified transactions · ${health.snapshots?.n ?? 2} equity snapshots</p>`;
   } catch (err) {
     el.innerHTML = `<p class="text-down text-xs">Coverage check error: ${escapeHtml(err.message)}</p>`;
