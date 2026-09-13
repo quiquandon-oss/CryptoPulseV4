@@ -96,9 +96,9 @@
   <!-- POSITION HISTORY CHARTS -->
   <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
     <!-- Visualization 1: Portfolio Equity Curve -->
-    <section class="bg-surface border border-border rounded-xl p-4 space-y-3">
+    <section class="glossy-card rounded-2xl p-4 space-y-3">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-        <h2 class="text-xs font-mono font-semibold text-faint uppercase tracking-wider">Position Value History</h2>
+        <h2 class="text-sm font-sans font-semibold text-ink">Position Value History</h2>
         <div class="flex items-center gap-2">
           <div id="rangeButtons" class="flex gap-1 overflow-x-auto no-scrollbar"></div>
           <div id="valueChartExpand"></div>
@@ -108,9 +108,9 @@
     </section>
 
     <!-- Visualization 2: Cumulative Net P/L -->
-    <section class="bg-surface border border-border rounded-xl p-4 space-y-3">
+    <section class="glossy-card rounded-2xl p-4 space-y-3">
       <div class="flex items-center justify-between gap-2">
-        <h2 class="text-xs font-mono font-semibold text-faint uppercase tracking-wider">Cumulative Net P/L</h2>
+        <h2 class="text-sm font-sans font-semibold text-ink">Cumulative Net P/L</h2>
         <div id="pnlChartExpand"></div>
       </div>
       <div id="pnlChart" class="p-1 min-h-[140px]"><div class="chart-skeleton w-full" style="height:200px"></div></div>
@@ -118,9 +118,9 @@
   </div>
 
   <!-- BENCHMARK COMPARISON -->
-  <section class="mb-6 bg-surface border border-border rounded-xl p-4 space-y-3">
+  <section class="mb-6 glossy-card rounded-2xl p-4 space-y-3">
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-      <h2 class="text-xs font-mono font-semibold text-faint uppercase tracking-wider">Portfolio vs. BTC Benchmark (Normalized Base = 100)</h2>
+      <h2 class="text-sm font-sans font-semibold text-ink">Portfolio vs. BTC Benchmark <span class="text-faint font-normal">(Base = 100)</span></h2>
       <div class="flex items-center gap-2">
         <div id="benchmarkRangeButtons" class="flex gap-1 overflow-x-auto no-scrollbar"></div>
         <div id="benchmarkChartExpand"></div>
@@ -160,7 +160,7 @@
 
 </div>
 
-<script src="app.js?v=2026091210"></script>
+<script src="app.js?v=2026091211"></script>
 <script>
 renderNav('portfolio.html');
 
