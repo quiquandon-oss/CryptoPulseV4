@@ -1,0 +1,21 @@
+name: Verify Capital endpoints (one-off)
+on:
+  workflow_dispatch: {}
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch transactions endpoint (all + BTC-filtered)
+        run: |
+          curl -s "${{ secrets.V4_WORKER_URL }}/api/portfolio/transactions?asset=LINK" -o /tmp/link_txs.json
+          curl -s "${{ secrets.V4_WORKER_URL }}/api/portfolio/assets" -o /tmp/assets.json
+          python3 -m json.tool /tmp/link_txs.json > .github/verify-link-txs.json
+          python3 -m json.tool /tmp/assets.json > .github/verify-assets.json
+          git config user.email "ci@cryptopulse.local"
+          git config user.name "CI Verification"
+          git add .github/verify-link-txs.json .github/verify-assets.json
+          git commit -m "chore: capture live Capital endpoint responses" || echo "nothing to commit"
+          git push
