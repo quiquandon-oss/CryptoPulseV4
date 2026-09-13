@@ -105,6 +105,9 @@ export default {
       if (parts[1] === 'assets' && parts[2] && parts[3] === 'performance') {
         return await handleAssetPerformance(env, parts[2]);
       }
+      if (parts[1] === 'assets' && parts[2] && parts[3] === 'prediction-funnel') {
+        return await handleAssetPredictionFunnel(env, parts[2], url);
+      }
       if (parts[1] === 'assets' && parts[2]) {
         return await handleAssetDetail(env, parts[2]);
       }
@@ -281,6 +284,20 @@ async function handlePredictionFunnel(env, url) {
     return json({ model, horizonHours, funnel: null, message: 'Prediction data source not configured.' });
   }
   const result = await predictionFunnel.computePortfolioFunnel(env, model, horizonHours);
+  return json(result);
+}
+
+async function handleAssetPredictionFunnel(env, assetId, url) {
+  const asset = assetId.toUpperCase();
+  const model = (url.searchParams.get('model') || 'knn').toLowerCase();
+  const horizonHours = Number(url.searchParams.get('horizon')) || 24;
+  if (model !== 'knn' && model !== 'timesfm') {
+    return json({ error: `Unknown model "${model}" — expected "knn" or "timesfm"` }, 400);
+  }
+  if (!env.V1V2_DB) {
+    return json({ model, horizonHours, asset, funnel: null, message: 'Prediction data source not configured.' });
+  }
+  const result = await predictionFunnel.computeAssetFunnel(env, asset, model, horizonHours);
   return json(result);
 }
 

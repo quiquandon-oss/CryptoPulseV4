@@ -186,7 +186,7 @@
 
 </div>
 
-<script src="app.js?v=2026091212"></script>
+<script src="app.js?v=2026091213"></script>
 <script>
 renderNav('portfolio.html');
 
@@ -440,106 +440,13 @@ async function loadBenchmarkChart() {
 // --- Short-Term Prediction Funnel ------------------------------------
 // Reuses V2's existing k-NN and TimesFM (Experiment 4) prediction models —
 // no new model built here. See engine/prediction_funnel.js for the full
-// methodology and honesty rules this is built on.
-let funnelModel = 'knn';
-let funnelHorizon = 24;
-
-function drawFunnelSelectors() {
-  renderRangeButtons('funnelModelButtons', ['knn', 'timesfm'], funnelModel, (v) => { funnelModel = v; drawFunnelSelectors(); loadFunnelChart(); });
-  renderRangeButtons('funnelHorizonButtons', [12, 24], funnelHorizon, (v) => { funnelHorizon = Number(v); drawFunnelSelectors(); loadFunnelChart(); });
-  // Relabel the generic range buttons for this context (they render the
-  // raw values by default — "knn"/"timesfm" and "12"/"24" aren't
-  // self-explanatory on their own).
-  const modelEl = document.getElementById('funnelModelButtons');
-  modelEl.querySelectorAll('button').forEach((btn) => {
-    btn.textContent = btn.dataset.range === 'knn' ? 'k-NN' : 'TimesFM';
-  });
-  const horizonEl = document.getElementById('funnelHorizonButtons');
-  horizonEl.querySelectorAll('button').forEach((btn) => {
-    btn.textContent = `${btn.dataset.range}h`;
-  });
-}
-
-async function fetchFunnelData(model, horizon) {
-  return v4Fetch(`/api/portfolio/prediction-funnel?model=${model}&horizon=${horizon}`);
-}
-
-function renderFunnelDetails(el, data) {
-  if (!data.funnel) {
-    el.innerHTML = `<p class="text-faint">${data.message || 'No prediction available for this model/horizon right now.'}</p>`;
-    return;
-  }
-  const rows = [];
-  if (data.model === 'knn' && data.sufficiencyByAsset) {
-    rows.push('<p class="text-ink font-medium">Per-asset accuracy (directional, historical):</p>');
-    for (const [asset, s] of Object.entries(data.sufficiencyByAsset)) {
-      const badColor = s.accuracy != null && s.accuracy < 0.5 ? 'text-down' : 'text-up';
-      rows.push(`<p class="text-faint pl-2">&bull; <span class="text-ink font-medium">${asset}:</span> <span class="${badColor}">${s.message}</span></p>`);
-    }
-  } else if (data.model === 'timesfm' && data.sufficiency) {
-    const s = data.sufficiency;
-    rows.push(`<p class="text-ink font-medium">BTC accuracy: <span class="${s.sufficient ? '' : 'text-warn'}">${s.message}</span></p>`);
-    if (!s.sufficient) rows.push('<p class="text-warn text-[11px]">Below the 20-sample minimum this app uses everywhere else before trusting an accuracy figure \u2014 treat this model\'s direction as unverified.</p>');
-  }
-  if (data.coverageNote) rows.push(`<p class="text-faint pt-1 border-t border-border">${data.coverageNote}</p>`);
-  if (data.funnel.methodologyNote) rows.push(`<p class="text-faint">${data.funnel.methodologyNote}</p>`);
-  if (data.isPointForecastOnly) rows.push('<p class="text-faint">TimesFM produces a single forecast, not a percentile range \u2014 shown as a line, not a shaded band, because a band would need more resolved predictions than exist yet to build honestly.</p>');
-  el.innerHTML = rows.join('');
-}
-
-async function loadFunnelChart() {
-  const el = document.getElementById('funnelChart');
-  const detailsEl = document.getElementById('funnelDetailsContent');
-  try {
-    const data = await fetchFunnelData(funnelModel, funnelHorizon);
-    renderPortfolioFunnelChart(el, data.historyPoints, data);
-    renderFunnelDetails(detailsEl, data);
-
-    // Dedicated fullscreen wiring: this chart has two independent selectors
-    // (model x horizon), which the generic addFullscreenButtonWithRange
-    // (built for a single range dimension) doesn't model — built directly
-    // against the shared primitives instead of forcing a mismatched fit.
-    const expandEl = document.getElementById('funnelChartExpand');
-    expandEl.innerHTML = `<button class="touch-target text-faint hover-text-ink rounded hover-bg-elevated" aria-label="Expand chart" title="Expand">${EXPAND_ICON_SVG}</button>`;
-    expandEl.querySelector('button').addEventListener('click', () => openFunnelFullscreen());
-  } catch (err) {
-    renderDataState(el, 'ERROR', err.message);
-    detailsEl.innerHTML = `<p class="text-down">${err.message}</p>`;
-  }
-}
-
-function openFunnelFullscreen() {
-  const modal = ensureFullscreenModal();
-  modal.querySelector('#chartFullscreenTitle').textContent = 'Short-Term Prediction Funnel';
-  const body = modal.querySelector('#chartFullscreenBody');
-  body.innerHTML = `
-    <div class="flex items-center justify-between gap-2 flex-wrap mb-3">
-      <div id="fsFunnelModelButtons" class="flex gap-1"></div>
-      <div id="fsFunnelHorizonButtons" class="flex gap-1"></div>
-    </div>
-    <div id="fsFunnelChart" class="flex-1"></div>`;
-  modal.classList.remove('hidden');
-  modal.classList.add('flex');
-
-  let fsModel = funnelModel, fsHorizon = funnelHorizon;
-  async function draw() {
-    renderRangeButtons('fsFunnelModelButtons', ['knn', 'timesfm'], fsModel, (v) => { fsModel = v; draw(); });
-    renderRangeButtons('fsFunnelHorizonButtons', [12, 24], fsHorizon, (v) => { fsHorizon = Number(v); draw(); });
-    document.querySelectorAll('#fsFunnelModelButtons button').forEach((btn) => { btn.textContent = btn.dataset.range === 'knn' ? 'k-NN' : 'TimesFM'; });
-    document.querySelectorAll('#fsFunnelHorizonButtons button').forEach((btn) => { btn.textContent = `${btn.dataset.range}h`; });
-
-    const selectorRowH = body.querySelector('.flex-wrap').getBoundingClientRect().height;
-    const rect = body.getBoundingClientRect();
-    _fullscreenSizeHint = (rect.width > 0 && rect.height > 0) ? { width: rect.width, height: Math.max(160, rect.height - selectorRowH - 12) } : null;
-    try {
-      const data = await fetchFunnelData(fsModel, fsHorizon);
-      renderPortfolioFunnelChart(document.getElementById('fsFunnelChart'), data.historyPoints, data);
-    } finally {
-      _fullscreenSizeHint = null;
-    }
-  }
-  draw();
-}
+// methodology and honesty rules this is built on. Shared controller
+// (initPredictionFunnelUI, app.js) also used by each asset detail page.
+initPredictionFunnelUI(
+  { modelButtons: 'funnelModelButtons', horizonButtons: 'funnelHorizonButtons', chart: 'funnelChart', expand: 'funnelChartExpand', detailsContent: 'funnelDetailsContent', detailsHeader: 'funnelDetailsHeader' },
+  (model, horizon) => `/api/portfolio/prediction-funnel?model=${model}&horizon=${horizon}`,
+  'Short-Term Prediction Funnel',
+);
 
 async function loadHistoryStatus() {
   const el = document.getElementById('portfolioHistoryCoverage');
@@ -569,13 +476,6 @@ if (importHeader) {
   });
 }
 
-const funnelDetailsHeader = document.getElementById('funnelDetailsHeader');
-if (funnelDetailsHeader) {
-  funnelDetailsHeader.addEventListener('click', () => {
-    funnelDetailsHeader.classList.toggle('open');
-  });
-}
-
 function loadAll() {
   loadSummary();
   loadInsights();
@@ -583,13 +483,11 @@ function loadAll() {
   loadAllocation();
   loadValueChart();
   loadBenchmarkChart();
-  loadFunnelChart();
   loadHistoryStatus();
 }
 
 drawRangeButtons();
 drawBenchmarkRangeButtons();
-drawFunnelSelectors();
 loadAll();
 </script>
 </body>

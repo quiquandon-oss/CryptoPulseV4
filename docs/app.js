@@ -1019,7 +1019,112 @@ function renderMarketPulseBtcChart(container, btcAlignment, isLive = false) {
   }));
 }
 
-// --- Portfolio Prediction Funnel: real history + a widening projection ---
+// --- Shared Prediction Funnel controller (portfolio + per-coin) ----------
+// One implementation used by both My Assets (portfolio-level) and each
+// asset detail page (per-coin) — avoids exactly the kind of duplicated,
+// silently-drifting implementations found and fixed elsewhere in this app
+// (the 5 independently-built range-button renderers earlier this session).
+function renderFunnelDetails(el, data) {
+  if (!data.funnel) {
+    el.innerHTML = `<p class="text-faint">${data.message || 'No prediction available for this model/horizon right now.'}</p>`;
+    return;
+  }
+  const rows = [];
+  if (data.model === 'knn' && data.sufficiencyByAsset) {
+    rows.push('<p class="text-ink font-medium">Per-asset accuracy (directional, historical):</p>');
+    for (const [asset, s] of Object.entries(data.sufficiencyByAsset)) {
+      const badColor = s.accuracy != null && s.accuracy < 0.5 ? 'text-down' : 'text-up';
+      rows.push(`<p class="text-faint pl-2">&bull; <span class="text-ink font-medium">${asset}:</span> <span class="${badColor}">${s.message}</span></p>`);
+    }
+  } else if (data.model === 'knn' && data.sufficiency) {
+    const s = data.sufficiency;
+    const badColor = s.accuracy != null && s.accuracy < 0.5 ? 'text-down' : 'text-up';
+    rows.push(`<p class="text-ink font-medium">${data.asset || 'This asset'} accuracy: <span class="${badColor}">${s.message}</span></p>`);
+  } else if (data.model === 'timesfm' && data.sufficiency) {
+    const s = data.sufficiency;
+    rows.push(`<p class="text-ink font-medium">BTC accuracy: <span class="${s.sufficient ? '' : 'text-warn'}">${s.message}</span></p>`);
+    if (!s.sufficient) rows.push('<p class="text-warn text-[11px]">Below the 20-sample minimum this app uses everywhere else before trusting an accuracy figure \u2014 treat this model\'s direction as unverified.</p>');
+  }
+  if (data.coverageNote) rows.push(`<p class="text-faint pt-1 border-t border-border">${data.coverageNote}</p>`);
+  if (data.funnel.methodologyNote) rows.push(`<p class="text-faint">${data.funnel.methodologyNote}</p>`);
+  if (data.isPointForecastOnly) rows.push('<p class="text-faint">TimesFM produces a single forecast, not a percentile range \u2014 shown as a line, not a shaded band, because a band would need more resolved predictions than exist yet to build honestly.</p>');
+  el.innerHTML = rows.join('');
+}
+
+/**
+ * @param ids { modelButtons, horizonButtons, chart, expand, detailsContent, detailsHeader }
+ * @param fetchUrl (model, horizon) => URL string for v4Fetch
+ * @param title shown in the fullscreen header
+ */
+function initPredictionFunnelUI(ids, fetchUrl, title) {
+  let model = 'knn', horizon = 24;
+
+  function relabelSelectorButtons() {
+    document.querySelectorAll(`#${ids.modelButtons} button`).forEach((btn) => { btn.textContent = btn.dataset.range === 'knn' ? 'k-NN' : 'TimesFM'; });
+    document.querySelectorAll(`#${ids.horizonButtons} button`).forEach((btn) => { btn.textContent = `${btn.dataset.range}h`; });
+  }
+
+  function drawSelectors() {
+    renderRangeButtons(ids.modelButtons, ['knn', 'timesfm'], model, (v) => { model = v; drawSelectors(); load(); });
+    renderRangeButtons(ids.horizonButtons, [12, 24], horizon, (v) => { horizon = Number(v); drawSelectors(); load(); });
+    relabelSelectorButtons();
+  }
+
+  async function load() {
+    const el = document.getElementById(ids.chart);
+    const detailsEl = document.getElementById(ids.detailsContent);
+    try {
+      const data = await v4Fetch(fetchUrl(model, horizon));
+      renderPredictionFunnelChart(el, data.historyPoints, data);
+      renderFunnelDetails(detailsEl, data);
+      const expandEl = document.getElementById(ids.expand);
+      expandEl.innerHTML = `<button class="touch-target text-faint hover-text-ink rounded hover-bg-elevated" aria-label="Expand chart" title="Expand">${EXPAND_ICON_SVG}</button>`;
+      expandEl.querySelector('button').addEventListener('click', openFullscreen);
+    } catch (err) {
+      renderDataState(el, 'ERROR', err.message);
+      if (detailsEl) detailsEl.innerHTML = `<p class="text-down">${err.message}</p>`;
+    }
+  }
+
+  function openFullscreen() {
+    const modal = ensureFullscreenModal();
+    modal.querySelector('#chartFullscreenTitle').textContent = title;
+    const body = modal.querySelector('#chartFullscreenBody');
+    body.innerHTML = `
+      <div class="flex items-center justify-between gap-2 flex-wrap mb-3">
+        <div id="fsFunnelModelButtons" class="flex gap-1"></div>
+        <div id="fsFunnelHorizonButtons" class="flex gap-1"></div>
+      </div>
+      <div id="fsFunnelChartBody" class="flex-1"></div>`;
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+
+    let fsModel = model, fsHorizon = horizon;
+    async function draw() {
+      renderRangeButtons('fsFunnelModelButtons', ['knn', 'timesfm'], fsModel, (v) => { fsModel = v; draw(); });
+      renderRangeButtons('fsFunnelHorizonButtons', [12, 24], fsHorizon, (v) => { fsHorizon = Number(v); draw(); });
+      document.querySelectorAll('#fsFunnelModelButtons button').forEach((btn) => { btn.textContent = btn.dataset.range === 'knn' ? 'k-NN' : 'TimesFM'; });
+      document.querySelectorAll('#fsFunnelHorizonButtons button').forEach((btn) => { btn.textContent = `${btn.dataset.range}h`; });
+
+      const selectorRowH = body.querySelector('.flex-wrap').getBoundingClientRect().height;
+      const rect = body.getBoundingClientRect();
+      _fullscreenSizeHint = (rect.width > 0 && rect.height > 0) ? { width: rect.width, height: Math.max(160, rect.height - selectorRowH - 12) } : null;
+      try {
+        const data = await v4Fetch(fetchUrl(fsModel, fsHorizon));
+        renderPredictionFunnelChart(document.getElementById('fsFunnelChartBody'), data.historyPoints, data);
+      } finally {
+        _fullscreenSizeHint = null;
+      }
+    }
+    draw();
+  }
+
+  const detailsHeader = document.getElementById(ids.detailsHeader);
+  if (detailsHeader) detailsHeader.addEventListener('click', () => detailsHeader.classList.toggle('open'));
+
+  drawSelectors();
+  load();
+}
 // Reuses V2's existing k-NN/TimesFM models (never a new one built here).
 // The projected region is drawn as a visually distinct widening cone — never
 // the same solid-line weight as real history — because a confident-looking
@@ -1029,8 +1134,8 @@ function renderMarketPulseBtcChart(container, btcAlignment, isLive = false) {
 // accuracy lives in the details panel below (deliberately not printed on the
 // chart itself, so it doesn't get lost in a data-dense image, but always
 // one tap away, never hidden by default).
-function renderPortfolioFunnelChart(container, historyPoints, funnelData) {
-  const hist = (historyPoints || []).filter((p) => p.total_value_usd != null);
+function renderPredictionFunnelChart(container, historyPoints, funnelData) {
+  const hist = (historyPoints || []).map((p) => ({ ts: p.ts, value: p.total_value_usd ?? p.price })).filter((p) => p.value != null);
   const funnel = funnelData?.funnel;
   if (hist.length < 2 || !funnel) {
     renderDataState(container, 'INSUFFICIENT_DATA', funnelData?.message || 'Not enough data for a prediction funnel yet.');
@@ -1046,7 +1151,7 @@ function renderPortfolioFunnelChart(container, historyPoints, funnelData) {
   const futureSlot = Math.max(2, Math.round(n * 0.25));
   const totalSlots = n - 1 + futureSlot;
 
-  const allVals = [...hist.map((p) => p.total_value_usd), funnel.p25Value, funnel.medianValue, funnel.p75Value];
+  const allVals = [...hist.map((p) => p.value), funnel.p25Value, funnel.medianValue, funnel.p75Value];
   const rawMin = Math.min(...allVals), rawMax = Math.max(...allVals);
   const breathing = (rawMax - rawMin) * 0.12 || Math.abs(rawMax) * 0.02 || 1;
   const min = rawMin - breathing, max = rawMax + breathing;
@@ -1055,7 +1160,7 @@ function renderPortfolioFunnelChart(container, historyPoints, funnelData) {
   const x = (i) => pad + (i / totalSlots) * (W - pad * 2);
   const y = (v) => H - pad - ((v - min) / range) * (H - pad * 2);
 
-  const histPts = hist.map((p, i) => ({ x: x(i), y: y(p.total_value_usd) }));
+  const histPts = hist.map((p, i) => ({ x: x(i), y: y(p.value) }));
   const nowPt = histPts[histPts.length - 1];
   const futureX = x(n - 1 + futureSlot);
   const trendUp = funnel.medianValue >= funnel.currentValue;
@@ -1093,7 +1198,7 @@ function renderPortfolioFunnelChart(container, historyPoints, funnelData) {
   wireChartTooltip(container, W, H, [...histPts.map((p) => p.x), futureX], (i) => {
     if (i < histPts.length) {
       return {
-        value: fmtUsd(hist[i].total_value_usd),
+        value: fmtUsd(hist[i].value),
         label: new Date(hist[i].ts).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit' }),
         y: histPts[i].y,
       };

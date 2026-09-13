@@ -8,7 +8,7 @@
 // could be wrong instead of one thing everyone can point at.
 import { computeHoldings } from '../engine/portfolio.js';
 import { getAllTransactions, getCurrentPrices, getPortfolioHistory } from './portfolio.js';
-import { projectPortfolioFunnel, evaluateModelSufficiency } from '../engine/prediction_funnel.js';
+import { projectPortfolioFunnel, projectAssetPriceRange, evaluateModelSufficiency } from '../engine/prediction_funnel.js';
 
 const KNN_TABLES = {
   BTC: { table: 'predictions', priceCol: 'btc_price_at_prediction' },
@@ -16,22 +16,32 @@ const KNN_TABLES = {
   LINK: { table: 'link_predictions', priceCol: 'link_price_at_prediction' },
 };
 
+/** Latest UNRESOLVED k-NN prediction for ONE asset at the given horizon, or
+ * null if this asset has no k-NN model (SOL/HYPE) or no current prediction. */
+async function fetchKnnPredictionForAsset(env, asset, horizonHours) {
+  const cfg = KNN_TABLES[asset];
+  if (!cfg) return null;
+  const row = await env.V1V2_DB.prepare(
+    `SELECT ts, target_ts, ${cfg.priceCol} as priceAtPrediction, median_analog_return, return_p25, return_p75, n_analogs, calibrated_p_up
+     FROM ${cfg.table} WHERE horizon_hours = ? AND resolved_ts IS NULL ORDER BY ts DESC LIMIT 1`,
+  ).bind(horizonHours).first();
+  if (!row) return null;
+  return {
+    prediction: { p25ReturnPct: row.return_p25, medianReturnPct: row.median_analog_return, p75ReturnPct: row.return_p75 },
+    detail: { predictionTs: row.ts, targetTs: row.target_ts, priceAtPrediction: row.priceAtPrediction, nAnalogs: row.n_analogs, calibratedPUp: row.calibrated_p_up },
+  };
+}
+
 /** Latest UNRESOLVED k-NN prediction per covered asset (BTC/ETH/LINK only —
  * V2 has no k-NN model for SOL or HYPE) at the given horizon. */
 async function fetchKnnPredictions(env, horizonHours) {
   const predictions = {};
   const details = {};
-  for (const [asset, { table, priceCol }] of Object.entries(KNN_TABLES)) {
-    const row = await env.V1V2_DB.prepare(
-      `SELECT ts, target_ts, ${priceCol} as priceAtPrediction, median_analog_return, return_p25, return_p75, n_analogs, calibrated_p_up
-       FROM ${table} WHERE horizon_hours = ? AND resolved_ts IS NULL ORDER BY ts DESC LIMIT 1`,
-    ).bind(horizonHours).first();
-    if (row) {
-      predictions[asset] = { p25ReturnPct: row.return_p25, medianReturnPct: row.median_analog_return, p75ReturnPct: row.return_p75 };
-      details[asset] = {
-        predictionTs: row.ts, targetTs: row.target_ts, priceAtPrediction: row.priceAtPrediction,
-        nAnalogs: row.n_analogs, calibratedPUp: row.calibrated_p_up,
-      };
+  for (const asset of Object.keys(KNN_TABLES)) {
+    const result = await fetchKnnPredictionForAsset(env, asset, horizonHours);
+    if (result) {
+      predictions[asset] = result.prediction;
+      details[asset] = result.detail;
     }
   }
   return { predictions, details };
@@ -117,6 +127,57 @@ export async function computePortfolioFunnel(env, model, horizonHours) {
   }
 
   return { model, horizonHours, historyPoints, funnel: null, message: `Unknown model "${model}".` };
+}
+
+/**
+ * Per-coin equivalent of computePortfolioFunnel — same models, same
+ * disclosure rules, one asset instead of the whole portfolio. Reuses
+ * projectAssetPriceRange directly (not projectPortfolioFunnel, which is
+ * for combining multiple assets) since there's nothing to aggregate here.
+ * @param asset 'BTC' | 'ETH' | 'LINK' | 'SOL' | 'HYPE'
+ */
+export async function computeAssetFunnel(env, asset, model, horizonHours) {
+  const { results: candles } = await env.DB
+    .prepare('SELECT ts, close FROM market_observations WHERE asset_id = ? AND ts >= ? ORDER BY ts ASC')
+    .bind(asset, Date.now() - 7 * 86_400_000).all();
+  const historyPoints = (candles || []).map((c) => ({ ts: c.ts, price: c.close }));
+  const currentPrice = historyPoints.length ? historyPoints[historyPoints.length - 1].price : null;
+
+  if (currentPrice == null) {
+    return { model, horizonHours, asset, historyPoints, funnel: null, message: `No recent price history for ${asset}.` };
+  }
+
+  if (model === 'timesfm') {
+    if (asset !== 'BTC') {
+      return { model, horizonHours, asset, historyPoints, funnel: null, message: `TimesFM has never been run for ${asset} \u2014 only BTC.` };
+    }
+    const { row, sufficiency } = await fetchTimesFmPrediction(env, horizonHours);
+    if (!row) {
+      return { model, horizonHours, asset, historyPoints, funnel: null, sufficiency, message: 'No current TimesFM prediction available for this horizon.' };
+    }
+    const range = projectAssetPriceRange(currentPrice, row.predicted_return_pct, row.predicted_return_pct, row.predicted_return_pct);
+    return {
+      model, horizonHours, asset, historyPoints, sufficiency, isPointForecastOnly: true,
+      targetTs: row.target_ts, predictionTs: row.ts,
+      funnel: { currentValue: currentPrice, p25Value: range.p25, medianValue: range.median, p75Value: range.p75, coverage: { modeledAssets: [asset], flatAssets: [], coveragePct: 1 }, methodologyNote: null },
+    };
+  }
+
+  if (model === 'knn') {
+    const result = await fetchKnnPredictionForAsset(env, asset, horizonHours);
+    if (!result) {
+      const reason = KNN_TABLES[asset] ? 'No current prediction available for this horizon.' : `k-NN has never been run for ${asset} \u2014 only BTC, ETH, and LINK.`;
+      return { model, horizonHours, asset, historyPoints, funnel: null, message: reason };
+    }
+    const range = projectAssetPriceRange(currentPrice, result.prediction.p25ReturnPct, result.prediction.medianReturnPct, result.prediction.p75ReturnPct);
+    const sufficiency = await fetchKnnSufficiency(env, asset);
+    return {
+      model, horizonHours, asset, historyPoints, sufficiency, detail: result.detail, targetTs: result.detail.targetTs,
+      funnel: { currentValue: currentPrice, p25Value: range.p25, medianValue: range.median, p75Value: range.p75, coverage: { modeledAssets: [asset], flatAssets: [], coveragePct: 1 }, methodologyNote: null },
+    };
+  }
+
+  return { model, horizonHours, asset, historyPoints, funnel: null, message: `Unknown model "${model}".` };
 }
 
 export { getPortfolioHistory as getFunnelHistoryPoints };

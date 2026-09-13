@@ -87,6 +87,31 @@
     </div>
   </section>
 
+  <!-- SHORT-TERM PREDICTION FUNNEL (per-coin) -->
+  <section class="mb-5 glossy-card rounded-2xl p-4 space-y-3">
+    <div class="flex flex-col gap-2">
+      <div class="flex items-center justify-between gap-2">
+        <h2 class="text-sm font-sans font-semibold text-ink">Short-Term Prediction Funnel</h2>
+        <div id="assetFunnelChartExpand"></div>
+      </div>
+      <div class="flex items-center justify-between gap-2 flex-wrap">
+        <div id="assetFunnelModelButtons" class="flex gap-1"></div>
+        <div id="assetFunnelHorizonButtons" class="flex gap-1"></div>
+      </div>
+    </div>
+    <div id="assetFunnelChart" class="p-1 min-h-[160px]"><div class="chart-skeleton w-full" style="height:200px"></div></div>
+
+    <div class="border border-border rounded-xl overflow-hidden bg-elevated">
+      <div id="assetFunnelDetailsHeader" class="accordion-header flex items-center justify-between p-3 cursor-pointer hover:bg-surface transition-colors">
+        <span class="text-xs font-sans font-semibold text-ink">Model Details &mdash; accuracy, coverage &amp; methodology</span>
+        <span class="accordion-chevron text-xs font-mono text-faint">&darr;</span>
+      </div>
+      <div id="assetFunnelDetailsContent" class="accordion-content p-3 border-t border-border text-xs font-sans space-y-2">
+        <p class="text-faint">Loading&hellip;</p>
+      </div>
+    </div>
+  </section>
+
   <!-- 5. MY POSITION DETAILS -->
   <section id="positionSection" class="mb-5 bg-surface border border-border rounded-xl p-4 shadow-sm font-mono space-y-2">
     <h2 class="text-xs font-semibold text-faint uppercase tracking-wider">My Position</h2>
@@ -117,7 +142,7 @@
 
 </div>
 
-<script src="app.js?v=2026091212"></script>
+<script src="app.js?v=2026091213"></script>
 <script>
 renderNav('asset.html');
 
@@ -245,6 +270,17 @@ renderNav('asset.html');
 
   drawRangeButtons();
   loadChart();
+
+  // Short-Term Prediction Funnel (per-coin) — same shared controller used
+  // on My Assets for the portfolio-level version. For SOL/HYPE (no k-NN or
+  // TimesFM model has ever covered either), the backend honestly returns
+  // funnel: null with a stated reason — same code path handles every
+  // asset, no special-casing needed here.
+  initPredictionFunnelUI(
+    { modelButtons: 'assetFunnelModelButtons', horizonButtons: 'assetFunnelHorizonButtons', chart: 'assetFunnelChart', expand: 'assetFunnelChartExpand', detailsContent: 'assetFunnelDetailsContent', detailsHeader: 'assetFunnelDetailsHeader' },
+    (model, horizon) => `/api/assets/${asset}/prediction-funnel?model=${model}&horizon=${horizon}`,
+    `${asset} \u2014 Short-Term Prediction Funnel`,
+  );
 
   // Resolved Model Performance
   try {
