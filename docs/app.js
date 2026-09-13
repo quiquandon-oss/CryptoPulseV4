@@ -1018,3 +1018,90 @@ function renderMarketPulseBtcChart(container, btcAlignment, isLive = false) {
     y: yPulse(points[i].marketPulse),
   }));
 }
+
+// --- Portfolio Prediction Funnel: real history + a widening projection ---
+// Reuses V2's existing k-NN/TimesFM models (never a new one built here).
+// The projected region is drawn as a visually distinct widening cone — never
+// the same solid-line weight as real history — because a confident-looking
+// single line into the future would misrepresent genuine uncertainty this
+// project's own evidence (see the accuracy figures in the details panel)
+// says is real. Green/red is the median direction only; the actual per-model
+// accuracy lives in the details panel below (deliberately not printed on the
+// chart itself, so it doesn't get lost in a data-dense image, but always
+// one tap away, never hidden by default).
+function renderPortfolioFunnelChart(container, historyPoints, funnelData) {
+  const hist = (historyPoints || []).filter((p) => p.total_value_usd != null);
+  const funnel = funnelData?.funnel;
+  if (hist.length < 2 || !funnel) {
+    renderDataState(container, 'INSUFFICIENT_DATA', funnelData?.message || 'Not enough data for a prediction funnel yet.');
+    return;
+  }
+
+  const { W, H, isFullscreen } = getChartDimensions(600, 240);
+  const pad = 14;
+  const n = hist.length;
+  // One extra x-slot reserved for the projected point, so the cone has
+  // somewhere to widen toward — proportional to the horizon relative to the
+  // history window shown, capped so it never dwarfs the real data.
+  const futureSlot = Math.max(2, Math.round(n * 0.25));
+  const totalSlots = n - 1 + futureSlot;
+
+  const allVals = [...hist.map((p) => p.total_value_usd), funnel.p25Value, funnel.medianValue, funnel.p75Value];
+  const rawMin = Math.min(...allVals), rawMax = Math.max(...allVals);
+  const breathing = (rawMax - rawMin) * 0.12 || Math.abs(rawMax) * 0.02 || 1;
+  const min = rawMin - breathing, max = rawMax + breathing;
+  const range = (max - min) || 1;
+
+  const x = (i) => pad + (i / totalSlots) * (W - pad * 2);
+  const y = (v) => H - pad - ((v - min) / range) * (H - pad * 2);
+
+  const histPts = hist.map((p, i) => ({ x: x(i), y: y(p.total_value_usd) }));
+  const nowPt = histPts[histPts.length - 1];
+  const futureX = x(n - 1 + futureSlot);
+  const trendUp = funnel.medianValue >= funnel.currentValue;
+  const color = trendUp ? 'var(--up)' : 'var(--down)';
+  const gradId = `plotgrad-${Math.random().toString(36).slice(2, 9)}`;
+
+  const conePath = `M${nowPt.x.toFixed(1)},${nowPt.y.toFixed(1)} L${futureX.toFixed(1)},${y(funnel.p75Value).toFixed(1)} L${futureX.toFixed(1)},${y(funnel.p25Value).toFixed(1)} Z`;
+  const medianLine = `M${nowPt.x.toFixed(1)},${nowPt.y.toFixed(1)} L${futureX.toFixed(1)},${y(funnel.medianValue).toFixed(1)}`;
+  const upperEdge = `M${nowPt.x.toFixed(1)},${nowPt.y.toFixed(1)} L${futureX.toFixed(1)},${y(funnel.p75Value).toFixed(1)}`;
+  const lowerEdge = `M${nowPt.x.toFixed(1)},${nowPt.y.toFixed(1)} L${futureX.toFixed(1)},${y(funnel.p25Value).toFixed(1)}`;
+
+  container.innerHTML = `
+    <svg viewBox="0 0 ${W} ${H}" class="w-full h-auto">
+      <defs>
+        <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.22"/>
+          <stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <path d="${smoothFillPathD(histPts, H - pad)}" fill="url(#${gradId})"/>
+      <line x1="${nowPt.x.toFixed(1)}" y1="${pad}" x2="${nowPt.x.toFixed(1)}" y2="${H - pad}" stroke="var(--border-strong)" stroke-width="1" stroke-dasharray="2 2"/>
+      <path d="${conePath}" fill="${color}" opacity="0.12"/>
+      <path d="${upperEdge}" fill="none" stroke="${color}" stroke-width="1.25" stroke-dasharray="3 3" opacity="0.7"/>
+      <path d="${lowerEdge}" fill="none" stroke="${color}" stroke-width="1.25" stroke-dasharray="3 3" opacity="0.7"/>
+      <path d="${medianLine}" fill="none" stroke="${color}" stroke-width="2" stroke-dasharray="5 3"/>
+      <path d="${smoothPathD(histPts)}" fill="none" stroke="var(--accent)" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round"/>
+      <circle cx="${nowPt.x.toFixed(1)}" cy="${nowPt.y.toFixed(1)}" r="3" fill="var(--accent)"/>
+    </svg>
+    <div class="flex items-center justify-center gap-4 ${captionClass(isFullscreen)} font-mono mt-1.5">
+      <span class="flex items-center gap-1"><span class="w-2.5 h-0.5 rounded-full inline-block" style="background:var(--accent)"></span><span class="text-faint">History</span></span>
+      <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm inline-block" style="background:${color}; opacity:0.4"></span><span class="text-faint">Projected range (${trendUp ? '+' : ''}${(((funnel.medianValue / funnel.currentValue) - 1) * 100).toFixed(1)}% median)</span></span>
+    </div>
+    <p class="${captionClass(isFullscreen)} text-faint text-center mt-1 px-2">Reuses V2's existing prediction models \u2014 not a new one built for this chart. See Model Details below for real accuracy and coverage before reading too much into this.</p>`;
+
+  wireChartTooltip(container, W, H, [...histPts.map((p) => p.x), futureX], (i) => {
+    if (i < histPts.length) {
+      return {
+        value: fmtUsd(hist[i].total_value_usd),
+        label: new Date(hist[i].ts).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit' }),
+        y: histPts[i].y,
+      };
+    }
+    return {
+      value: `${fmtUsd(funnel.p25Value)} \u2013 ${fmtUsd(funnel.p75Value)} (median ${fmtUsd(funnel.medianValue)})`,
+      label: `Projected \u2014 ${funnelData.horizonHours}h from now`,
+      y: y(funnel.medianValue),
+    };
+  });
+}
