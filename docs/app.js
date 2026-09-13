@@ -327,7 +327,8 @@ function renderPortfolioValueChart(container, points, opts = {}) {
     renderDataState(container, 'INSUFFICIENT_DATA', 'No verified portfolio snapshots prior to April 2026.');
     return;
   }
-  const W = 600, H = 220, pad = 12;
+  const { W, H, isFullscreen } = getChartDimensions(600, 220);
+  const pad = 12;
   const vals = valid.map((p) => p.total_value_usd);
   const rawMin = Math.min(...vals), rawMax = Math.max(...vals);
   const breathing = (rawMax - rawMin) * 0.12 || Math.abs(rawMax) * 0.02 || 1;
@@ -350,6 +351,7 @@ function renderPortfolioValueChart(container, points, opts = {}) {
   const fillPath = smoothFillPathD(valuePts, H - pad);
   const lastPt = valuePts[valuePts.length - 1];
   const showPulse = !!(opts.showLivePulse && opts.isLive);
+  const gridSvg = isFullscreen ? yAxisGridSvg(min, max, pad, W, H, (v) => fmtUsd(v)) : '';
 
   container.innerHTML = `
     <svg viewBox="0 0 ${W} ${H}" class="w-full h-auto">
@@ -360,12 +362,13 @@ function renderPortfolioValueChart(container, points, opts = {}) {
           <stop offset="100%" stop-color="${lineColor}" stop-opacity="0"/>
         </linearGradient>
       </defs>
+      ${gridSvg}
       <path d="${fillPath}" fill="url(#${gradId})" clip-path="url(#${clipId})"/>
       ${investedPts.length ? `<path d="${smoothPathD(investedPts)}" fill="none" stroke="var(--faint)" stroke-width="1.5" stroke-dasharray="4 3" clip-path="url(#${clipId})"/>` : ''}
       <path d="${smoothPathD(valuePts)}" fill="none" stroke="${lineColor}" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round"/>
       ${showPulse ? livePulseMarker(lastPt.x, lastPt.y, lineColor) : ''}
     </svg>
-    <div class="flex justify-between items-center text-[10px] font-mono text-faint mt-1 px-1">
+    <div class="flex justify-between items-center ${captionClass(isFullscreen)} font-mono text-faint mt-1 px-1">
       <span>${new Date(valid[0].ts).toLocaleDateString()}</span>
       <span><span class="${trendUp ? 'text-up' : 'text-down'}">— </span>value &nbsp; <span class="text-faint">- - </span>invested${investedOffScale ? ` (${fmtUsd(lastInvested)}, off-scale)` : ''}</span>
       <span>${new Date(valid[n - 1].ts).toLocaleDateString()}</span>
@@ -385,7 +388,8 @@ function renderCumulativePnlChart(container, points) {
     renderDataState(container, 'INSUFFICIENT_DATA', 'Insufficient snapshot history to plot cumulative P/L.');
     return;
   }
-  const W = 600, H = 200, pad = 12;
+  const { W, H, isFullscreen } = getChartDimensions(600, 200);
+  const pad = 12;
   // Scale to the P/L series' own range — do NOT force 0 into it. A portfolio
   // sitting consistently around -$700 gets squashed near one edge if the
   // range is forced to span all the way up to 0; the day-to-day P/L movement
@@ -406,6 +410,7 @@ function renderCumulativePnlChart(container, points) {
   const strokeColor = lastPnl >= 0 ? 'var(--up)' : 'var(--down)';
   const gradId = `plotgrad-${Math.random().toString(36).slice(2, 9)}`;
   const fillPath = smoothFillPathD(pnlPts, H - pad);
+  const gridSvg = isFullscreen ? yAxisGridSvg(min, max, pad, W, H, (v) => `${v >= 0 ? '+' : ''}${fmtUsd(v)}`) : '';
 
   container.innerHTML = `
     <svg viewBox="0 0 ${W} ${H}" class="w-full h-auto">
@@ -415,11 +420,12 @@ function renderCumulativePnlChart(container, points) {
           <stop offset="100%" stop-color="${strokeColor}" stop-opacity="0"/>
         </linearGradient>
       </defs>
+      ${gridSvg}
       <path d="${fillPath}" fill="url(#${gradId})"/>
       ${zeroInRange ? `<line x1="${pad}" y1="${zeroY}" x2="${W - pad}" y2="${zeroY}" stroke="var(--border-strong)" stroke-width="1" stroke-dasharray="2 2" />` : ''}
       <path d="${smoothPathD(pnlPts)}" fill="none" stroke="${strokeColor}" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round"/>
     </svg>
-    <div class="flex justify-between items-center text-[10px] font-mono text-faint mt-1 px-1">
+    <div class="flex justify-between items-center ${captionClass(isFullscreen)} font-mono text-faint mt-1 px-1">
       <span>${new Date(valid[0].ts).toLocaleDateString()}</span>
       <span class="${lastPnl >= 0 ? 'text-up' : 'text-down'} font-medium">Net P/L: ${fmtUsd(lastPnl)}</span>
       <span>${new Date(valid[n - 1].ts).toLocaleDateString()}</span>
@@ -511,7 +517,8 @@ function renderBenchmarkChart(container, benchmarkData) {
     return;
   }
   const points = benchmarkData.points;
-  const W = 600, H = 180, pad = 12;
+  const { W, H, isFullscreen } = getChartDimensions(600, 180);
+  const pad = 12;
   const allVals = points.flatMap((p) => [p.portfolioNormalized, p.btcNormalized]).filter((v) => v != null);
   const rawMin = Math.min(...allVals), rawMax = Math.max(...allVals);
   const breathing = (rawMax - rawMin) * 0.08 || 1;
@@ -527,6 +534,7 @@ function renderBenchmarkChart(container, benchmarkData) {
   const gradId = `plotgrad-${Math.random().toString(36).slice(2, 9)}`;
   const trendUp = points[n - 1].portfolioNormalized >= points[0].portfolioNormalized;
   const fillColor = trendUp ? 'var(--up)' : 'var(--down)';
+  const gridSvg = isFullscreen ? yAxisGridSvg(min, max, pad, W, H, (v) => v.toFixed(0)) : '';
 
   container.innerHTML = `
     <svg viewBox="0 0 ${W} ${H}" class="w-full h-auto">
@@ -536,11 +544,12 @@ function renderBenchmarkChart(container, benchmarkData) {
           <stop offset="100%" stop-color="${fillColor}" stop-opacity="0"/>
         </linearGradient>
       </defs>
+      ${gridSvg}
       <path d="${smoothFillPathD(portPts, H - pad)}" fill="url(#${gradId})"/>
       ${btcPts.length ? `<path d="${smoothPathD(btcPts)}" fill="none" stroke="var(--warn)" stroke-width="1.5" stroke-dasharray="3 3"/>` : ''}
       <path d="${smoothPathD(portPts)}" fill="none" stroke="var(--accent)" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round"/>
     </svg>
-    <div class="flex justify-between items-center text-[10px] font-mono text-faint mt-1 px-1">
+    <div class="flex justify-between items-center ${captionClass(isFullscreen)} font-mono text-faint mt-1 px-1">
       <span>${new Date(points[0].ts).toLocaleDateString()} (Base=100)</span>
       <span><span class="text-accent">— </span>Portfolio &nbsp; <span class="text-warn">- - </span>BTC Benchmark</span>
       <span>${new Date(points[n - 1].ts).toLocaleDateString()}</span>
@@ -573,7 +582,9 @@ function renderPriceSignalChart(container, points, requestedRange = null) {
     return;
   }
   const RANGE_MS = { '12h': 12, '24h': 24, '7d': 24 * 7, '30d': 24 * 30 };
-  const W = 600, H = 240, priceH = 150, scoreTop = 165, scoreH = 45, pad = 8;
+  const { W, H, isFullscreen } = getChartDimensions(600, 240);
+  const scaleK = H / 240;
+  const priceH = 150 * scaleK, scoreTop = 165 * scaleK, scoreH = 45 * scaleK, pad = 8;
   const prices = points.map((p) => p.price).filter((p) => p != null);
   const minP = Math.min(...prices), maxP = Math.max(...prices);
   const rangeP = (maxP - minP) || 1;
@@ -583,6 +594,7 @@ function renderPriceSignalChart(container, points, requestedRange = null) {
 
   const pricePts = points.map((p, i) => (p.price != null ? { x: x(i), y: yPrice(p.price) } : null)).filter(Boolean);
   const gradId = `plotgrad-${Math.random().toString(36).slice(2, 9)}`;
+  const priceGrid = isFullscreen ? yAxisGridSvg(minP, maxP, pad, W, priceH, (v) => fmtUsd(v), 3) : '';
 
   const maxScore = Math.max(6, ...points.map((p) => Math.abs(p.score || 0)));
   const barW = Math.max(1.5, ((W - pad * 2) / n) * 0.6);
@@ -597,11 +609,11 @@ function renderPriceSignalChart(container, points, requestedRange = null) {
   const actualSpanMs = points[n - 1].ts - points[0].ts;
   const requestedMs = requestedRange ? RANGE_MS[requestedRange.toLowerCase()] * 3_600_000 : null;
   const sparseNote = requestedMs && actualSpanMs < requestedMs * 0.9
-    ? `<p class="text-[10px] text-faint mt-1.5 px-1">Only ${Math.max(1, Math.round(actualSpanMs / 3_600_000))}h of signal history exists yet — shorter than the selected ${requestedRange} range, so every range showing the same points here isn't a bug, it'll fill in as more hourly cycles run.</p>`
+    ? `<p class="${captionClass(isFullscreen)} text-faint mt-1.5 px-1">Only ${Math.max(1, Math.round(actualSpanMs / 3_600_000))}h of signal history exists yet — shorter than the selected ${requestedRange} range, so every range showing the same points here isn't a bug, it'll fill in as more hourly cycles run.</p>`
     : '';
 
   container.innerHTML = `
-    <p class="text-[10px] text-faint mb-1 px-1">Top: hourly price. Bottom: signal strength each cycle (green=bullish, red=bearish, gray=neutral) &mdash; taller bar means stronger conviction, not bigger price move.</p>
+    <p class="${captionClass(isFullscreen)} text-faint mb-1 px-1">Top: hourly price. Bottom: signal strength each cycle (green=bullish, red=bearish, gray=neutral) &mdash; taller bar means stronger conviction, not bigger price move.</p>
     <svg viewBox="0 0 ${W} ${H}" class="w-full h-auto">
       <defs>
         <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
@@ -609,12 +621,13 @@ function renderPriceSignalChart(container, points, requestedRange = null) {
           <stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/>
         </linearGradient>
       </defs>
+      ${priceGrid}
       <path d="${smoothFillPathD(pricePts, priceH - pad)}" fill="url(#${gradId})"/>
       <path d="${smoothPathD(pricePts)}" fill="none" stroke="var(--accent)" stroke-width="1.75" stroke-linejoin="round" stroke-linecap="round" />
       <line x1="${pad}" y1="${scoreMid}" x2="${W - pad}" y2="${scoreMid}" stroke="var(--border)" stroke-width="1" />
       ${bars}
     </svg>
-    <div class="flex justify-between font-mono text-[10px] text-faint mt-1 px-1">
+    <div class="flex justify-between font-mono ${captionClass(isFullscreen)} text-faint mt-1 px-1">
       <span>${new Date(points[0].ts).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit' })}</span>
       <span class="text-accent">— price</span>
       <span>${new Date(points[n - 1].ts).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit' })}</span>
@@ -664,6 +677,52 @@ function closeChartFullscreen() {
   if (modal) { modal.classList.add('hidden'); modal.classList.remove('flex'); }
 }
 
+// Set only while a chart is rendering inside the fullscreen modal; read by
+// getChartDimensions() below so every chart automatically fills the real
+// available space there instead of using its compact embedded size — with
+// zero changes needed to any chart function's signature or any call site.
+let _fullscreenSizeHint = null;
+
+/**
+ * Every chart calls this instead of hardcoding `const W = 600, H = 220`.
+ * Outside fullscreen, returns the given defaults unchanged (zero behavior
+ * change for every existing inline/embedded chart). Inside fullscreen,
+ * scales H (viewBox height, at the same W=600 convention) to fill the
+ * actual measured available height, clamped so it can't go absurdly tall
+ * on very tall screens or shrink below the normal minimum.
+ */
+function getChartDimensions(defaultW, defaultH, reserveForCaptionPx = 36) {
+  if (!_fullscreenSizeHint || !_fullscreenSizeHint.width) return { W: defaultW, H: defaultH, isFullscreen: false };
+  const availW = _fullscreenSizeHint.width;
+  const availH = Math.max(defaultH, _fullscreenSizeHint.height - reserveForCaptionPx);
+  const scaledH = defaultW * (availH / availW);
+  const H = Math.max(defaultH, Math.min(scaledH, defaultH * 2.6));
+  return { W: defaultW, H, isFullscreen: true };
+}
+
+/** Real Y-axis gridlines + value labels — only drawn in fullscreen (see
+ * getChartDimensions) since the compact embedded charts don't have room
+ * for them without cluttering the small view. yOffset shifts the whole
+ * grid down for a lower panel in a multi-panel chart. */
+function yAxisGridSvg(min, max, pad, W, panelH, formatFn, count = 4, yOffset = 0) {
+  const step = (max - min) / (count - 1) || 1;
+  let out = '';
+  for (let i = 0; i < count; i++) {
+    const val = min + step * i;
+    const y = yOffset + panelH - pad - ((val - min) / (max - min || 1)) * (panelH - pad * 2);
+    out += `<line x1="0" y1="${y.toFixed(1)}" x2="${W}" y2="${y.toFixed(1)}" stroke="var(--border)" stroke-width="0.75" stroke-dasharray="2 3"/>`;
+    out += `<text x="4" y="${(y - 4).toFixed(1)}" font-size="11" fill="var(--faint)" class="font-mono">${formatFn(val)}</text>`;
+  }
+  return out;
+}
+
+/** Caption/legend text size — bumped up in fullscreen where there's room,
+ * since the same 10px caption that's fine embedded reads as "too small"
+ * when the chart around it has grown to fill a whole phone screen. */
+function captionClass(isFullscreen) {
+  return isFullscreen ? 'text-sm' : 'text-[10px]';
+}
+
 function openChartFullscreen(title, renderFn, ...args) {
   const modal = ensureFullscreenModal();
   modal.querySelector('#chartFullscreenTitle').textContent = title;
@@ -671,7 +730,13 @@ function openChartFullscreen(title, renderFn, ...args) {
   body.innerHTML = '';
   modal.classList.remove('hidden');
   modal.classList.add('flex');
+  // getBoundingClientRect forces a synchronous layout, so this reads the
+  // real available space now that the modal is actually visible (a hidden
+  // element always measures 0x0).
+  const rect = body.getBoundingClientRect();
+  _fullscreenSizeHint = (rect.width > 0 && rect.height > 0) ? { width: rect.width, height: rect.height } : null;
   renderFn(body, ...args);
+  _fullscreenSizeHint = null; // never leak into a later inline re-render of the same chart function
 }
 
 const EXPAND_ICON_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>';
@@ -804,9 +869,11 @@ function renderMarketPulseBtcChart(container, btcAlignment, isLive = false) {
     renderDataState(container, 'INSUFFICIENT_DATA', btcAlignment?.message || 'Not enough overlapping Market Pulse and BTC data yet.');
     return;
   }
-  const W = 600, padX = 12;
-  const pulseH = 110, gap = 14, btcH = 90;
-  const totalH = pulseH + gap + btcH;
+  const { W, H: totalH, isFullscreen } = getChartDimensions(600, 214);
+  const padX = 12;
+  const scaleK = totalH / 214;
+  const pulseH = 110 * scaleK, gap = 14 * scaleK, btcH = 90 * scaleK;
+  const labelSize = isFullscreen ? 13 : 9;
   const n = points.length;
   const x = (i) => padX + (i / (n - 1)) * (W - padX * 2);
 
@@ -830,6 +897,8 @@ function renderMarketPulseBtcChart(container, btcAlignment, isLive = false) {
   const btcGradId = `plotgrad-${Math.random().toString(36).slice(2, 9)}`;
   const lastPulsePt = pulsePts[pulsePts.length - 1];
   const lastBtcPt = btcPts[btcPts.length - 1];
+  const pulseGrid = isFullscreen ? yAxisGridSvg(0, 100, 10, W, pulseH, (v) => v.toFixed(0), 3) : '';
+  const btcGrid = isFullscreen ? yAxisGridSvg(bMin, bMax, 8, W, btcH, (v) => `${v >= 0 ? '+' : ''}${v.toFixed(0)}%`, 3, pulseH + gap) : '';
 
   container.innerHTML = `
     <svg viewBox="0 0 ${W} ${totalH}" class="w-full h-auto">
@@ -843,17 +912,19 @@ function renderMarketPulseBtcChart(container, btcAlignment, isLive = false) {
           <stop offset="100%" stop-color="${btcColor}" stop-opacity="0"/>
         </linearGradient>
       </defs>
-      <text x="${padX}" y="10" class="font-mono" font-size="9" fill="var(--faint)">MARKET PULSE (0-100)</text>
+      <text x="${padX}" y="${labelSize + 1}" class="font-mono" font-size="${labelSize}" fill="var(--faint)">MARKET PULSE (0-100)</text>
+      ${pulseGrid}
       <path d="${smoothFillPathD(pulsePts, pulseH - 10)}" fill="url(#${pulseGradId})"/>
       <path d="${smoothPathD(pulsePts)}" fill="none" stroke="var(--accent)" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round"/>
       ${isLive ? livePulseMarker(lastPulsePt.x, lastPulsePt.y, 'var(--accent)') : ''}
-      <text x="${padX}" y="${pulseH + gap + 8}" class="font-mono" font-size="9" fill="var(--faint)">BTC CUMULATIVE RETURN FROM PERIOD START</text>
+      <text x="${padX}" y="${pulseH + gap + labelSize - 1}" class="font-mono" font-size="${labelSize}" fill="var(--faint)">BTC CUMULATIVE RETURN FROM PERIOD START</text>
+      ${btcGrid}
       ${zeroInRange ? `<line x1="${padX}" y1="${zeroY}" x2="${W - padX}" y2="${zeroY}" stroke="var(--border-strong)" stroke-width="1" stroke-dasharray="2 2"/>` : ''}
       <path d="${smoothFillPathD(btcPts, pulseH + gap + btcH - 8)}" fill="url(#${btcGradId})"/>
       <path d="${smoothPathD(btcPts)}" fill="none" stroke="${btcColor}" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round"/>
       ${isLive ? livePulseMarker(lastBtcPt.x, lastBtcPt.y, btcColor) : ''}
     </svg>
-    <div class="flex justify-between items-center text-[10px] font-mono text-faint mt-1 px-1">
+    <div class="flex justify-between items-center ${captionClass(isFullscreen)} font-mono text-faint mt-1 px-1">
       <span>${new Date(points[0].ts).toLocaleDateString()}</span>
       <span>BTC: ${lastBtc >= 0 ? '+' : ''}${lastBtc.toFixed(1)}%</span>
       <span>${new Date(points[n - 1].ts).toLocaleDateString()}</span>
