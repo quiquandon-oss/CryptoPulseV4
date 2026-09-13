@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CryptoPulse V4 — Market Pulse</title>
+<link rel="icon" type="image/x-icon" href="favicon.ico">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="48x48" href="favicon-48x48.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+
+<script>
+  (function () {
+    var saved = localStorage.getItem('v4-theme');
+    var theme = saved || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    if (theme === 'light') document.documentElement.setAttribute('data-theme', 'light');
+  })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="theme.css" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: { fontFamily: { sans: ['Inter', 'sans-serif'], mono: ['"IBM Plex Mono"', 'monospace'] } } } };
+</script>
+</head>
+<body class="bg-base text-ink font-sans min-h-screen">
+<div class="max-w-4xl mx-auto px-4 sm:px-6 py-4 sm:py-8 pb-24 md:pb-8">
+
+  <div class="flex items-center justify-between mb-3">
+    <a href="index.html" class="text-xs text-faint hover-text-muted font-mono">&larr; Dashboard</a>
+    <button class="theme-toggle touch-target" aria-label="Toggle theme" title="Toggle light/dark theme">
+      <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/></svg>
+    </button>
+  </div>
+
+  <nav id="siteNav" class="mb-4"></nav>
+
+  <h1 class="font-mono font-semibold text-xl tracking-tight mb-1 text-ink">Market Pulse</h1>
+  <p class="text-xs text-faint font-mono mb-6 pb-4 border-b border-border">Composite market-state score &middot; 0-100 &middot; deterministic evidence, not hype.</p>
+
+  <!-- THE ONE GAUGE -->
+  <section class="mb-6 bg-surface border border-border rounded-xl p-5 shadow-sm">
+    <div id="gaugeContainer" class="flex justify-center py-2">
+      <p class="text-xs font-mono text-faint">Loading Market Pulse…</p>
+    </div>
+    <div id="disclosureNote" class="text-[10px] text-faint text-center mt-1 px-2 leading-relaxed"></div>
+  </section>
+
+  <!-- MARKET PULSE vs BTC -->
+  <section class="mb-6 bg-surface border border-border rounded-xl p-4 space-y-3">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+      <h2 class="text-xs font-mono font-semibold text-faint uppercase tracking-wider">Market Pulse vs. BTC</h2>
+      <div class="flex items-center gap-2">
+        <div id="mpRangeButtons" class="flex gap-1 overflow-x-auto no-scrollbar"></div>
+        <div id="mpChartExpand"></div>
+      </div>
+    </div>
+    <div id="mpBtcChart" class="min-h-[200px]">
+      <p class="text-xs font-mono text-faint text-center py-8">Loading chart…</p>
+    </div>
+  </section>
+
+  <!-- CURRENT RELATIONSHIP -->
+  <section class="mb-6 bg-surface border border-border rounded-xl p-4">
+    <h2 class="text-xs font-mono font-semibold text-faint uppercase tracking-wider mb-3">Current Relationship</h2>
+    <div id="relationshipContent" class="grid grid-cols-3 gap-2 font-mono text-center">
+      <p class="text-xs text-faint col-span-3">Loading…</p>
+    </div>
+  </section>
+
+  <!-- MARKET DRIVERS -->
+  <section class="mb-6 bg-surface border border-border rounded-xl p-4">
+    <h2 class="text-xs font-mono font-semibold text-faint uppercase tracking-wider mb-3">Market Drivers</h2>
+    <div id="driversContent" class="space-y-2 font-mono text-xs">
+      <p class="text-faint">Loading…</p>
+    </div>
+  </section>
+
+  <!-- HISTORICAL REGIME -->
+  <section class="mb-6 bg-surface border border-border rounded-xl p-4">
+    <h2 class="text-xs font-mono font-semibold text-faint uppercase tracking-wider mb-3">Historical Regime (BTC)</h2>
+    <div id="regimeTimeline">
+      <p class="text-xs font-mono text-faint">Loading…</p>
+    </div>
+  </section>
+
+  <!-- WHY THIS READING? -->
+  <section class="mb-6 bg-surface border border-border rounded-xl p-4">
+    <h2 class="text-xs font-mono font-semibold text-faint uppercase tracking-wider mb-3">Why This Reading?</h2>
+    <div id="explanationContent" class="text-xs font-mono text-ink space-y-1.5 leading-relaxed">
+      <p class="text-faint">Loading…</p>
+    </div>
+  </section>
+
+</div>
+
+<script src="app.js?v=2026091202"></script>
+<script>
+renderNav('market-pulse.html');
+
+const mpRanges = ['1W', '1M', '3M', '6M', '1Y', 'ALL'];
+let mpActiveRange = '3M'; // spec-mandated default
+
+function renderMpRangeButtons() {
+  const el = document.getElementById('mpRangeButtons');
+  el.innerHTML = mpRanges.map((r) => `<button data-range="${r}" class="text-[10px] font-mono px-2 py-0.5 rounded border ${r === mpActiveRange ? 'border-accent-30 bg-accent-soft text-accent' : 'border-border text-faint hover-bg-elevated'}">${r}</button>`).join('');
+  el.querySelectorAll('button').forEach((btn) => btn.addEventListener('click', () => { mpActiveRange = btn.dataset.range; renderMpRangeButtons(); loadMpChart(); }));
+}
+
+async function loadMpChart() {
+  const el = document.getElementById('mpBtcChart');
+  try {
+    const { btcAlignment } = await v4Fetch(`/api/market-pulse/history?range=${mpActiveRange}`);
+    renderMarketPulseBtcChart(el, btcAlignment);
+    addFullscreenButton('mpChartExpand', 'Market Pulse vs. BTC', renderMarketPulseBtcChart, btcAlignment);
+  } catch (err) {
+    renderDataState(el, 'ERROR', err.message);
+  }
+}
+
+async function loadCurrent() {
+  const gaugeEl = document.getElementById('gaugeContainer');
+  const disclosureEl = document.getElementById('disclosureNote');
+  const relEl = document.getElementById('relationshipContent');
+  const driversEl = document.getElementById('driversContent');
+  const explanationEl = document.getElementById('explanationContent');
+
+  try {
+    const data = await v4Fetch('/api/market-pulse');
+
+    if (data.marketPulse == null) {
+      renderDataState(gaugeEl, 'INSUFFICIENT_DATA', data.reason || 'Insufficient evidence to determine the current Market Pulse.');
+      relEl.innerHTML = '<p class="text-xs text-faint col-span-3">No data.</p>';
+      driversEl.innerHTML = '<p class="text-xs text-faint">No data.</p>';
+      explanationEl.innerHTML = `<p class="text-faint">${data.reason || 'Insufficient evidence.'}</p>`;
+      return;
+    }
+
+    const regimeText = data.drivers?.cycle?.phase ? data.drivers.cycle.phase.replaceAll('_', ' ') : null;
+    renderMarketPulseGauge(gaugeEl, data.marketPulse, data.label, regimeText);
+
+    if (data.partial) {
+      disclosureEl.innerHTML = `<span class="text-warn">Partial reading:</span> ${data.partialReason || ''}`;
+    } else if (data.disclosure) {
+      disclosureEl.textContent = data.disclosure;
+    }
+
+    // Current Relationship
+    const btcPriceStr = data.btcPrice != null ? fmtUsd(data.btcPrice) : '—';
+    relEl.innerHTML = `
+      <div><span class="text-[10px] text-faint uppercase block">Market Pulse</span><span class="text-sm font-semibold text-ink">${data.marketPulse}</span></div>
+      <div><span class="text-[10px] text-faint uppercase block">BTC</span><span class="text-sm font-semibold text-ink">${btcPriceStr}</span></div>
+      <div><span class="text-[10px] text-faint uppercase block">Alignment</span><span class="text-sm font-semibold ${data.alignment?.label?.includes('Bearish') ? 'text-down' : data.alignment?.label?.includes('Bullish') ? 'text-up' : 'text-ink'}">${data.alignment?.label || '—'}</span></div>
+      ${data.alignment?.detail ? `<p class="col-span-3 text-[10px] text-faint mt-1 normal-case">${data.alignment.detail}</p>` : '<p class="col-span-3 text-[10px] text-faint mt-1 normal-case">Not enough 7-day-old history yet to classify alignment.</p>'}`;
+
+    // Market Drivers
+    const d = data.drivers || {};
+    const rows = [
+      { label: 'Cycle', value: d.cycle ? `${d.cycle.phase?.replaceAll('_', ' ') || '—'}${d.cycle.drawdownFromAthPct != null ? ` &middot; ${d.cycle.drawdownFromAthPct.toFixed(1)}% off ATH` : ''}` : '—' },
+      { label: 'Sentiment', value: d.sentiment?.v1Score0to100 != null ? `${d.sentiment.v1Score0to100.toFixed(0)}/100 (V1, disclosed)` : '—' },
+      { label: 'Trend', value: d.trend ? `${d.trend.bullishCount} bullish / ${d.trend.bearishCount} bearish of ${d.trend.total} assets` : '—' },
+      { label: 'Volatility', value: d.volatility?.highVolatilityAssets?.length ? `Elevated (${d.volatility.highVolatilityAssets.join(', ')})` : 'Normal across tracked assets' },
+      { label: 'Risk', value: d.risk ? `${d.risk.level}` : '—', note: d.risk?.basis },
+    ];
+    driversEl.innerHTML = rows.map((r) => `
+      <div class="flex items-center justify-between py-1.5 border-b border-border last:border-0">
+        <span class="text-faint">${r.label}</span>
+        <span class="text-ink text-right">${r.value}</span>
+      </div>
+      ${r.note ? `<p class="text-[10px] text-faint normal-case -mt-1 mb-1">${r.note}</p>` : ''}`).join('');
+
+    // Why this reading
+    const exp = data.explanation || { summary: '', points: [] };
+    explanationEl.innerHTML = `<p class="text-ink font-medium">${exp.summary}</p>` +
+      (exp.points.length ? `<ul class="list-disc list-inside space-y-1 text-faint mt-1">${exp.points.map((p) => `<li>${p}</li>`).join('')}</ul>` : '');
+
+  } catch (err) {
+    renderDataState(gaugeEl, 'ERROR', err.message);
+  }
+}
+
+async function loadRegimeTimeline() {
+  const el = document.getElementById('regimeTimeline');
+  try {
+    const { points } = await v4Fetch('/api/assets/BTC/history?range=all');
+    renderRegimeTimeline(el, points, 'BTC');
+  } catch (err) {
+    renderDataState(el, 'ERROR', err.message);
+  }
+}
+
+renderMpRangeButtons();
+loadCurrent();
+loadMpChart();
+loadRegimeTimeline();
+</script>
+</body>
+</html>

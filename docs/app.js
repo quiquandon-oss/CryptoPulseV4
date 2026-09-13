@@ -615,3 +615,125 @@ function addFullscreenButton(buttonContainerId, title, renderFn, ...args) {
   el.innerHTML = `<button class="text-faint hover-text-ink p-1.5 rounded hover-bg-elevated" aria-label="Expand chart" title="Expand">${EXPAND_ICON_SVG}</button>`;
   el.querySelector('button').addEventListener('click', () => openChartFullscreen(title, renderFn, ...args));
 }
+
+// --- Market Pulse: the one gauge ----------------------------------------
+// Semicircle arc, 0-100. Colored by label (BULLISH/NEUTRAL/BEARISH) — never
+// a separate gauge per driver, per spec ("Cycle and Sentiment are
+// supporting drivers, not competing gauges").
+function renderMarketPulseGauge(container, marketPulse, label, regimeText) {
+  if (marketPulse == null) {
+    renderDataState(container, 'INSUFFICIENT_DATA', 'Insufficient evidence to determine the current Market Pulse.');
+    return;
+  }
+  const W = 220, H = 130, cx = 110, cy = 110, r = 90;
+  const fullLength = Math.PI * r;
+  const fillLength = (marketPulse / 100) * fullLength;
+  const color = label === 'BULLISH' ? 'var(--up)' : label === 'BEARISH' ? 'var(--down)' : 'var(--warn)';
+  const startX = cx - r, endX = cx + r;
+
+  container.innerHTML = `
+    <div class="flex flex-col items-center">
+      <svg viewBox="0 0 ${W} ${H}" class="w-full max-w-[260px] h-auto">
+        <path d="M${startX},${cy} A${r},${r} 0 0,1 ${endX},${cy}" fill="none" stroke="var(--border)" stroke-width="14" stroke-linecap="round"/>
+        <path d="M${startX},${cy} A${r},${r} 0 0,1 ${endX},${cy}" fill="none" stroke="${color}" stroke-width="14" stroke-linecap="round"
+          stroke-dasharray="${fillLength.toFixed(1)} ${fullLength.toFixed(1)}"/>
+      </svg>
+      <div class="-mt-10 text-center">
+        <div class="text-4xl font-mono font-bold text-ink">${marketPulse}</div>
+        <div class="text-sm font-mono font-semibold mt-0.5" style="color:${color}">${label}</div>
+        ${regimeText ? `<div class="text-[10px] font-mono text-faint uppercase tracking-wider mt-0.5">${regimeText}</div>` : ''}
+      </div>
+    </div>`;
+}
+
+// --- Historical Regime timeline ------------------------------------------
+// Groups consecutive same-regime rows into segments — shows V4's own actual
+// classification (TRENDING_BULLISH/RANGE_BOUND/etc), never invented
+// Wyckoff-style labels the underlying data doesn't support.
+function renderRegimeTimeline(container, regimeRows, asset = 'BTC') {
+  const rows = (regimeRows || []).filter((r) => r.regime && r.regime !== 'UNKNOWN').sort((a, b) => a.ts - b.ts);
+  if (rows.length < 1) {
+    renderDataState(container, 'INSUFFICIENT_DATA', `No historical regime classification available yet for ${asset}.`);
+    return;
+  }
+  const segments = [];
+  for (const row of rows) {
+    const last = segments[segments.length - 1];
+    if (last && last.regime === row.regime) last.endTs = row.ts;
+    else segments.push({ regime: row.regime, startTs: row.ts, endTs: row.ts });
+  }
+  const REGIME_COLOR = {
+    TRENDING_BULLISH: 'var(--up)', TRENDING_BEARISH: 'var(--down)',
+    RANGE_BOUND: 'var(--faint)', HIGH_VOLATILITY: 'var(--warn)', LOW_VOLATILITY: 'var(--accent)',
+    TRANSITION: 'var(--warn)',
+  };
+  const spanMs = segments[segments.length - 1].endTs - segments[0].startTs;
+  const fmtDate = (ts) => new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+
+  container.innerHTML = `
+    <div class="flex h-6 rounded-md overflow-hidden border border-border">
+      ${segments.map((s) => {
+        const width = spanMs > 0 ? Math.max(2, ((s.endTs - s.startTs) / spanMs) * 100) : 100 / segments.length;
+        return `<div style="width:${width}%; background:${REGIME_COLOR[s.regime] || 'var(--faint)'}" title="${s.regime}"></div>`;
+      }).join('')}
+    </div>
+    <div class="flex justify-between text-[10px] font-mono text-faint mt-1">
+      <span>${fmtDate(segments[0].startTs)}</span>
+      <span>${fmtDate(segments[segments.length - 1].endTs)}</span>
+    </div>
+    <div class="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-[10px] font-mono">
+      ${[...new Set(segments.map((s) => s.regime))].map((r) => `<span class="flex items-center gap-1"><span class="w-2 h-2 rounded-sm inline-block" style="background:${REGIME_COLOR[r] || 'var(--faint)'}"></span>${r.replaceAll('_', ' ')}</span>`).join('')}
+    </div>
+    ${spanMs < 24 * 3_600_000 ? `<p class="text-[10px] text-faint mt-2">Only ${(spanMs / 3_600_000).toFixed(0)}h of ${asset} regime history exists so far — this timeline will fill in as more hourly cycles run.</p>` : ''}`;
+}
+// Deliberately NOT one shared normalized scale (spec: "do not create a
+// misleading common normalized scale") — Market Pulse keeps its native
+// 0-100 range, BTC is cumulative % return from the window start.
+function renderMarketPulseBtcChart(container, btcAlignment) {
+  const points = btcAlignment?.points || [];
+  if (points.length < 2) {
+    renderDataState(container, 'INSUFFICIENT_DATA', btcAlignment?.message || 'Not enough overlapping Market Pulse and BTC data yet.');
+    return;
+  }
+  const W = 600, padX = 12;
+  const pulseH = 110, gap = 14, btcH = 90;
+  const totalH = pulseH + gap + btcH;
+  const n = points.length;
+  const x = (i) => padX + (i / (n - 1)) * (W - padX * 2);
+
+  // Top panel: Market Pulse, fixed 0-100 scale (it's inherently bounded).
+  const yPulse = (v) => pulseH - 10 - (v / 100) * (pulseH - 20);
+  const pulseLine = points.map((p, i) => `${x(i).toFixed(1)},${yPulse(p.marketPulse).toFixed(1)}`).join(' ');
+
+  // Bottom panel: BTC cumulative return, own auto-range, zero-line shown when in range.
+  const btcVals = points.map((p) => p.btcCumReturnPct);
+  const btcMin = Math.min(...btcVals), btcMax = Math.max(...btcVals);
+  const btcBreath = (btcMax - btcMin) * 0.15 || 1;
+  const bMin = btcMin - btcBreath, bMax = btcMax + btcBreath;
+  const bRange = (bMax - bMin) || 1;
+  const yBtc = (v) => pulseH + gap + btcH - 8 - ((v - bMin) / bRange) * (btcH - 16);
+  const btcLine = points.map((p, i) => `${x(i).toFixed(1)},${yBtc(p.btcCumReturnPct).toFixed(1)}`).join(' ');
+  const zeroY = yBtc(0);
+  const zeroInRange = zeroY >= pulseH + gap && zeroY <= pulseH + gap + btcH;
+  const lastBtc = btcVals[btcVals.length - 1];
+
+  container.innerHTML = `
+    <svg viewBox="0 0 ${W} ${totalH}" class="w-full h-auto">
+      <text x="${padX}" y="10" class="font-mono" font-size="9" fill="var(--faint)">MARKET PULSE (0-100)</text>
+      <polyline points="${pulseLine}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <text x="${padX}" y="${pulseH + gap + 8}" class="font-mono" font-size="9" fill="var(--faint)">BTC CUMULATIVE RETURN FROM PERIOD START</text>
+      ${zeroInRange ? `<line x1="${padX}" y1="${zeroY}" x2="${W - padX}" y2="${zeroY}" stroke="var(--border-strong)" stroke-width="1" stroke-dasharray="2 2"/>` : ''}
+      <polyline points="${btcLine}" fill="none" stroke="${lastBtc >= 0 ? 'var(--up)' : 'var(--down)'}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    </svg>
+    <div class="flex justify-between items-center text-[10px] font-mono text-faint mt-1 px-1">
+      <span>${new Date(points[0].ts).toLocaleDateString()}</span>
+      <span>BTC: ${lastBtc >= 0 ? '+' : ''}${lastBtc.toFixed(1)}%</span>
+      <span>${new Date(points[n - 1].ts).toLocaleDateString()}</span>
+    </div>`;
+
+  wireChartTooltip(container, W, totalH, points.map((_, i) => x(i)), (i) => ({
+    value: `Pulse ${points[i].marketPulse} &middot; BTC ${points[i].btcCumReturnPct >= 0 ? '+' : ''}${points[i].btcCumReturnPct.toFixed(1)}%`,
+    label: new Date(points[i].ts).toLocaleDateString(),
+    y: yPulse(points[i].marketPulse),
+  }));
+}
