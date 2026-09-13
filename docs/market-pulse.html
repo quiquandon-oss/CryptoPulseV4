@@ -105,7 +105,7 @@
 
 </div>
 
-<script src="app.js?v=2026091208"></script>
+<script src="app.js?v=2026091209"></script>
 <script>
 renderNav('market-pulse.html');
 
@@ -123,20 +123,33 @@ const ALIGNMENT_BADGE_STYLE = {
   'Market alignment': 'color:var(--faint); background:color-mix(in srgb, var(--faint) 15%, transparent); border-color:color-mix(in srgb, var(--faint) 30%, transparent);',
 };
 
+async function fetchMpChartData(range) {
+  const { btcAlignment } = await v4Fetch(`/api/market-pulse/history?range=${range}`);
+  const pts = btcAlignment?.points || [];
+  const lastTs = pts.length ? pts[pts.length - 1].ts : null;
+  const isLive = lastTs != null && (Date.now() - lastTs) < 70 * 60_000;
+  return { btcAlignment, isLive };
+}
+
 async function loadMpChart() {
   const el = document.getElementById('mpBtcChart');
   try {
-    const { btcAlignment } = await v4Fetch(`/api/market-pulse/history?range=${mpActiveRange}`);
-    const pts = btcAlignment?.points || [];
-    const lastTs = pts.length ? pts[pts.length - 1].ts : null;
-    const isLive = lastTs != null && (Date.now() - lastTs) < 70 * 60_000;
+    const { btcAlignment, isLive } = await fetchMpChartData(mpActiveRange);
     renderMarketPulseBtcChart(el, btcAlignment, isLive);
-    addFullscreenButton('mpChartExpand', 'Market Pulse vs. BTC', renderMarketPulseBtcChart, btcAlignment, isLive);
+
+    // Fullscreen gets its own working range selector — starts at whatever
+    // range the inline chart is currently showing, but changing it there
+    // only affects the fullscreen view, not the page behind it.
+    addFullscreenButtonWithRange('mpChartExpand', 'Market Pulse vs. BTC', mpRanges, () => mpActiveRange, async (range, chartEl) => {
+      const fsData = await fetchMpChartData(range);
+      renderMarketPulseBtcChart(chartEl, fsData.btcAlignment, fsData.isLive);
+    });
 
     // Headline numbers + badge, self-contained from this same chart data —
     // stays consistent with the bands actually drawn, rather than mixing
     // in the separately-fetched 7-day-window alignment used elsewhere on
     // this page.
+    const pts = btcAlignment?.points || [];
     const last = pts[pts.length - 1];
     const valueEl = document.getElementById('mpHeadlineValue');
     const btcEl = document.getElementById('mpHeadlineBtc');

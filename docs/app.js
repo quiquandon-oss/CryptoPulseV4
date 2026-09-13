@@ -739,6 +739,41 @@ function openChartFullscreen(title, renderFn, ...args) {
   _fullscreenSizeHint = null; // never leak into a later inline re-render of the same chart function
 }
 
+/**
+ * Fullscreen with a working range selector inside it — tapping a range
+ * re-fetches and re-renders without closing the modal. `fetchAndRender(range,
+ * chartEl)` owns the fetch + render call for whatever chart this is; this
+ * function only owns the modal chrome, the range-button row, and correctly
+ * re-measuring available space (which shrinks by the range row's own height)
+ * before each render.
+ */
+function openChartFullscreenWithRange(title, ranges, activeRange, fetchAndRender) {
+  const modal = ensureFullscreenModal();
+  modal.querySelector('#chartFullscreenTitle').textContent = title;
+  const body = modal.querySelector('#chartFullscreenBody');
+  body.innerHTML = '<div id="fsRangeButtons" class="flex gap-1 overflow-x-auto no-scrollbar mb-3"></div><div id="fsChartBody" class="flex-1"></div>';
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+
+  let currentRange = activeRange;
+  const chartEl = body.querySelector('#fsChartBody');
+
+  async function draw() {
+    renderRangeButtons('fsRangeButtons', ranges, currentRange, (r) => { currentRange = r; draw(); });
+    const rangeRowH = body.querySelector('#fsRangeButtons').getBoundingClientRect().height;
+    const rect = body.getBoundingClientRect();
+    _fullscreenSizeHint = (rect.width > 0 && rect.height > 0)
+      ? { width: rect.width, height: Math.max(160, rect.height - rangeRowH - 12) }
+      : null;
+    try {
+      await fetchAndRender(currentRange, chartEl);
+    } finally {
+      _fullscreenSizeHint = null;
+    }
+  }
+  draw();
+}
+
 const EXPAND_ICON_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>';
 
 /** Renders an expand button into `buttonContainerId` that opens the same
@@ -773,6 +808,16 @@ function addFullscreenButton(buttonContainerId, title, renderFn, ...args) {
   if (!el) return;
   el.innerHTML = `<button class="touch-target text-faint hover-text-ink rounded hover-bg-elevated" aria-label="Expand chart" title="Expand">${EXPAND_ICON_SVG}</button>`;
   el.querySelector('button').addEventListener('click', () => openChartFullscreen(title, renderFn, ...args));
+}
+
+/** Same as addFullscreenButton, but the fullscreen view gets its own working
+ * range selector instead of being frozen at whatever range was active when
+ * the expand button was tapped. */
+function addFullscreenButtonWithRange(buttonContainerId, title, ranges, getActiveRange, fetchAndRender) {
+  const el = document.getElementById(buttonContainerId);
+  if (!el) return;
+  el.innerHTML = `<button class="touch-target text-faint hover-text-ink rounded hover-bg-elevated" aria-label="Expand chart" title="Expand">${EXPAND_ICON_SVG}</button>`;
+  el.querySelector('button').addEventListener('click', () => openChartFullscreenWithRange(title, ranges, getActiveRange(), fetchAndRender));
 }
 
 // --- Market Pulse: the one gauge ----------------------------------------
@@ -955,6 +1000,11 @@ function renderMarketPulseBtcChart(container, btcAlignment, isLive = false) {
     <div class="flex items-center justify-center gap-4 ${captionClass(isFullscreen)} font-mono mt-1.5">
       <span class="flex items-center gap-1"><span class="w-2.5 h-0.5 rounded-full inline-block" style="background:var(--accent)"></span><span class="text-faint">Pulse (0&ndash;100)</span></span>
       <span class="flex items-center gap-1"><span class="w-2.5 h-0.5 rounded-full inline-block" style="background:${btcColor}"></span><span class="text-faint">BTC cumulative return</span></span>
+    </div>
+    <div class="flex items-center justify-center flex-wrap gap-x-4 gap-y-1 ${captionClass(isFullscreen)} font-mono mt-1">
+      <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm inline-block" style="background:color-mix(in srgb, var(--up) 35%, transparent)"></span><span class="text-faint">Bullish divergence</span></span>
+      <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm inline-block" style="background:color-mix(in srgb, var(--down) 35%, transparent)"></span><span class="text-faint">Bearish divergence</span></span>
+      <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm inline-block border border-border" style="background:color-mix(in srgb, var(--faint) 25%, transparent)"></span><span class="text-faint">Confirmation</span></span>
     </div>
     <div class="flex justify-between items-center ${captionClass(isFullscreen)} font-mono text-faint mt-1 px-1">
       <span>${new Date(points[0].ts).toLocaleDateString()}</span>
