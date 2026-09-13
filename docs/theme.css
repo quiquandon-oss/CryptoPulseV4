@@ -330,3 +330,12 @@ body { font-feature-settings: "tnum" 1, "cv05" 1; transition: background-color 0
   border-color: color-mix(in srgb, var(--down) 40%, var(--border));
   box-shadow: 0 8px 24px -10px color-mix(in srgb, var(--down) 30%, transparent);
 }
+
+/* Generalized glossy card — same treatment as dash-hero-card but not tied
+   to the Dashboard-only trial naming, for use anywhere the "wow screen"
+   treatment is deliberately extended (e.g. Market Pulse). */
+.glossy-card {
+  background: linear-gradient(135deg, var(--bg-elevated) 0%, var(--bg-surface) 55%, var(--bg-surface) 100%);
+  border: 1px solid var(--accent-border);
+  box-shadow: 0 10px 34px -12px color-mix(in srgb, var(--accent) 30%, transparent), 0 2px 10px rgba(0,0,0,0.16);
+}

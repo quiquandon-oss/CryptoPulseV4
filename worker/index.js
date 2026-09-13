@@ -18,7 +18,7 @@ import {
 } from '../engine/portfolio.js';
 import * as portfolio from './portfolio.js';
 import * as marketPulse from './market_pulse.js';
-import { computeAggregatedRegime, computeCyclePosition, computeHalvingPhase, explainMarketPulse, classifyAlignment, alignMarketPulseWithBtc } from '../engine/market_pulse.js';
+import { computeAggregatedRegime, computeCyclePosition, computeHalvingPhase, explainMarketPulse, classifyAlignment, classifyAlignmentSeries, alignMarketPulseWithBtc } from '../engine/market_pulse.js';
 import { fetchCandles } from './data-source.js';
 
 const CORS_HEADERS = {
@@ -377,6 +377,15 @@ async function handleMarketPulseHistory(env, url) {
     .prepare('SELECT ts, close FROM market_observations WHERE asset_id = ? AND ts >= ? ORDER BY ts ASC')
     .bind('BTC', since).all();
   const btcAlignment = alignMarketPulseWithBtc(points, btcCandles || []);
+
+  // Rolling alignment classification for the chart's background bands —
+  // computed once here (reusing the same tested classifyAlignment the
+  // Current Relationship section uses) so the frontend never needs its own
+  // copy of this logic, which could drift from the backend's over time.
+  if (btcAlignment.status === 'OK') {
+    const series = classifyAlignmentSeries(btcAlignment.points);
+    btcAlignment.points = btcAlignment.points.map((p, i) => ({ ...p, alignmentLabel: series[i]?.label ?? null }));
+  }
 
   return json({ range, points, btcAlignment });
 }

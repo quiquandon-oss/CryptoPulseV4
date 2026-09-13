@@ -3,8 +3,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   computeAggregatedRegime, computeCyclePosition, computeHalvingPhase, computeMarketPulse,
-  reconcileV1HistoryImport, classifyAlignment, explainMarketPulse, alignMarketPulseWithBtc,
-  CYCLE_ATH, HALVING_DATE_MS,
+  reconcileV1HistoryImport, classifyAlignment, classifyAlignmentSeries, explainMarketPulse,
+  alignMarketPulseWithBtc, CYCLE_ATH, HALVING_DATE_MS,
 } from '../engine/market_pulse.js';
 
 // --- computeAggregatedRegime ---
@@ -233,4 +233,42 @@ test('alignMarketPulseWithBtc: no overlapping data at all returns INSUFFICIENT_D
   const r = alignMarketPulseWithBtc([], []);
   assert.equal(r.status, 'INSUFFICIENT_DATA');
   assert.deepEqual(r.points, []);
+});
+
+// --- classifyAlignmentSeries ---
+
+test('classifyAlignmentSeries: first `windowSize` points are null — not enough trailing history to classify yet', () => {
+  const points = Array.from({ length: 5 }, (_, i) => ({ ts: i, marketPulse: 50, btcCumReturnPct: 0 }));
+  const result = classifyAlignmentSeries(points, 6);
+  assert.deepEqual(result, [null, null, null, null, null]);
+});
+
+test('classifyAlignmentSeries: classifies each point using the trailing window, reusing classifyAlignment exactly', () => {
+  const points = [
+    { ts: 0, marketPulse: 40, btcCumReturnPct: 0 },
+    { ts: 1, marketPulse: 42, btcCumReturnPct: 1 },
+    { ts: 2, marketPulse: 45, btcCumReturnPct: 3 },
+  ];
+  const result = classifyAlignmentSeries(points, 2);
+  assert.equal(result[0], null);
+  assert.equal(result[1], null);
+  // point index 2, window back to index 0: pulseChange=+5, btcChange=+3 -> Confirmation (both up)
+  assert.equal(result[2].label, 'Confirmation');
+});
+
+test('classifyAlignmentSeries: a flat window with no data at all returns an empty array, not a crash', () => {
+  assert.deepEqual(classifyAlignmentSeries([]), []);
+  assert.deepEqual(classifyAlignmentSeries(null), []);
+});
+
+test('classifyAlignmentSeries: divergence surfaces correctly mid-series (Pulse rising while BTC falls)', () => {
+  const points = [
+    { ts: 0, marketPulse: 40, btcCumReturnPct: 10 },
+    { ts: 1, marketPulse: 41, btcCumReturnPct: 8 },
+    { ts: 2, marketPulse: 42, btcCumReturnPct: 6 },
+    { ts: 3, marketPulse: 50, btcCumReturnPct: 2 },
+  ];
+  const result = classifyAlignmentSeries(points, 3);
+  // index 3, window back to index 0: pulseChange=+10 (up), btcChange=-8 (down) -> Bullish divergence
+  assert.equal(result[3].label, 'Bullish divergence');
 });

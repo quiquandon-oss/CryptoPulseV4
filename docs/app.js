@@ -863,75 +863,107 @@ function renderRegimeTimeline(container, regimeRows, asset = 'BTC') {
 // Deliberately NOT one shared normalized scale (spec: "do not create a
 // misleading common normalized scale") — Market Pulse keeps its native
 // 0-100 range, BTC is cumulative % return from the window start.
+// --- Market Pulse vs BTC: single overlaid plot, dual y-axis -------------
+// Scenario 2 rewrite: previously two stacked panels; now one plot area with
+// Pulse on the left axis (0-100, fixed) and BTC cumulative return on the
+// right axis (own auto-range) — the spec's own documented dual-axis
+// alternative ("a clearly documented dual-axis chart may be used if it
+// materially improves readability"). Colored background bands show how the
+// Pulse/BTC relationship has shifted over time (Confirmation / divergence),
+// computed server-side via classifyAlignmentSeries — this function only
+// renders the alignmentLabel already attached to each point, never
+// reclassifies anything itself, so there's exactly one implementation of
+// this logic to keep correct.
+const ALIGNMENT_BAND_COLOR = {
+  'Confirmation': 'var(--faint)',
+  'Bullish divergence': 'var(--up)',
+  'Bearish divergence': 'var(--down)',
+  'Market alignment': null, // no tint — nothing notable happening
+};
+
 function renderMarketPulseBtcChart(container, btcAlignment, isLive = false) {
   const points = btcAlignment?.points || [];
   if (points.length < 2) {
     renderDataState(container, 'INSUFFICIENT_DATA', btcAlignment?.message || 'Not enough overlapping Market Pulse and BTC data yet.');
     return;
   }
-  const { W, H: totalH, isFullscreen } = getChartDimensions(600, 214);
-  const padX = 12;
-  const scaleK = totalH / 214;
-  const pulseH = 110 * scaleK, gap = 14 * scaleK, btcH = 90 * scaleK;
-  const labelSize = isFullscreen ? 13 : 9;
+  const { W, H, isFullscreen } = getChartDimensions(600, 260);
+  const pad = 14;
+  const labelSize = isFullscreen ? 13 : 10;
   const n = points.length;
-  const x = (i) => padX + (i / (n - 1)) * (W - padX * 2);
+  const x = (i) => pad + (i / (n - 1)) * (W - pad * 2);
 
-  // Top panel: Market Pulse, fixed 0-100 scale (it's inherently bounded).
-  const yPulse = (v) => pulseH - 10 - (v / 100) * (pulseH - 20);
+  const yPulse = (v) => H - pad - (v / 100) * (H - pad * 2);
   const pulsePts = points.map((p, i) => ({ x: x(i), y: yPulse(p.marketPulse) }));
 
-  // Bottom panel: BTC cumulative return, own auto-range, zero-line shown when in range.
   const btcVals = points.map((p) => p.btcCumReturnPct);
   const btcMin = Math.min(...btcVals), btcMax = Math.max(...btcVals);
-  const btcBreath = (btcMax - btcMin) * 0.15 || 1;
+  const btcBreath = (btcMax - btcMin) * 0.12 || 1;
   const bMin = btcMin - btcBreath, bMax = btcMax + btcBreath;
   const bRange = (bMax - bMin) || 1;
-  const yBtc = (v) => pulseH + gap + btcH - 8 - ((v - bMin) / bRange) * (btcH - 16);
+  const yBtc = (v) => H - pad - ((v - bMin) / bRange) * (H - pad * 2);
   const btcPts = points.map((p, i) => ({ x: x(i), y: yBtc(p.btcCumReturnPct) }));
-  const zeroY = yBtc(0);
-  const zeroInRange = zeroY >= pulseH + gap && zeroY <= pulseH + gap + btcH;
+
   const lastBtc = btcVals[btcVals.length - 1];
   const btcColor = lastBtc >= 0 ? 'var(--up)' : 'var(--down)';
   const pulseGradId = `plotgrad-${Math.random().toString(36).slice(2, 9)}`;
-  const btcGradId = `plotgrad-${Math.random().toString(36).slice(2, 9)}`;
   const lastPulsePt = pulsePts[pulsePts.length - 1];
   const lastBtcPt = btcPts[btcPts.length - 1];
-  const pulseGrid = isFullscreen ? yAxisGridSvg(0, 100, 10, W, pulseH, (v) => v.toFixed(0), 3) : '';
-  const btcGrid = isFullscreen ? yAxisGridSvg(bMin, bMax, 8, W, btcH, (v) => `${v >= 0 ? '+' : ''}${v.toFixed(0)}%`, 3, pulseH + gap) : '';
+
+  // Group consecutive same-label points into bands, same pattern as
+  // renderRegimeTimeline. Only the ones with an actual tint color get drawn.
+  const bands = [];
+  for (let i = 0; i < points.length; i++) {
+    const label = points[i].alignmentLabel;
+    const last = bands[bands.length - 1];
+    if (last && last.label === label) last.endI = i;
+    else bands.push({ label, startI: i, endI: i });
+  }
+  const bandRects = bands.map((b) => {
+    const color = ALIGNMENT_BAND_COLOR[b.label];
+    if (!color) return '';
+    const x1 = x(b.startI), x2 = x(Math.min(b.endI + 1, n - 1));
+    return `<rect x="${x1.toFixed(1)}" y="0" width="${Math.max(1, x2 - x1).toFixed(1)}" height="${H}" fill="${color}" opacity="0.08"/>`;
+  }).join('');
+
+  const pulseGrid = isFullscreen ? yAxisGridSvg(0, 100, pad, W, H, (v) => v.toFixed(0), 3) : '';
+  // Right-axis BTC labels — text only (no second gridline set, which would
+  // visually clash with the Pulse grid at a different scale).
+  const btcAxisLabels = isFullscreen ? [0, 0.5, 1].map((frac) => {
+    const val = bMin + frac * (bMax - bMin);
+    const yPos = yBtc(val);
+    return `<text x="${W - pad}" y="${(yPos - 4).toFixed(1)}" font-size="11" fill="${btcColor}" text-anchor="end" class="font-mono">${val >= 0 ? '+' : ''}${val.toFixed(0)}%</text>`;
+  }).join('') : '';
 
   container.innerHTML = `
-    <svg viewBox="0 0 ${W} ${totalH}" class="w-full h-auto">
+    <svg viewBox="0 0 ${W} ${H}" class="w-full h-auto">
       <defs>
         <linearGradient id="${pulseGradId}" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.25"/>
+          <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.22"/>
           <stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/>
         </linearGradient>
-        <linearGradient id="${btcGradId}" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="${btcColor}" stop-opacity="0.2"/>
-          <stop offset="100%" stop-color="${btcColor}" stop-opacity="0"/>
-        </linearGradient>
       </defs>
-      <text x="${padX}" y="${labelSize + 1}" class="font-mono" font-size="${labelSize}" fill="var(--faint)">MARKET PULSE (0-100)</text>
+      ${bandRects}
       ${pulseGrid}
-      <path d="${smoothFillPathD(pulsePts, pulseH - 10)}" fill="url(#${pulseGradId})"/>
-      <path d="${smoothPathD(pulsePts)}" fill="none" stroke="var(--accent)" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round"/>
-      ${isLive ? livePulseMarker(lastPulsePt.x, lastPulsePt.y, 'var(--accent)') : ''}
-      <text x="${padX}" y="${pulseH + gap + labelSize - 1}" class="font-mono" font-size="${labelSize}" fill="var(--faint)">BTC CUMULATIVE RETURN FROM PERIOD START</text>
-      ${btcGrid}
-      ${zeroInRange ? `<line x1="${padX}" y1="${zeroY}" x2="${W - padX}" y2="${zeroY}" stroke="var(--border-strong)" stroke-width="1" stroke-dasharray="2 2"/>` : ''}
-      <path d="${smoothFillPathD(btcPts, pulseH + gap + btcH - 8)}" fill="url(#${btcGradId})"/>
-      <path d="${smoothPathD(btcPts)}" fill="none" stroke="${btcColor}" stroke-width="2.25" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="${smoothFillPathD(pulsePts, H - pad)}" fill="url(#${pulseGradId})"/>
+      <path d="${smoothPathD(btcPts)}" fill="none" stroke="${btcColor}" stroke-width="2" stroke-dasharray="4 3" stroke-linejoin="round" stroke-linecap="round"/>
       ${isLive ? livePulseMarker(lastBtcPt.x, lastBtcPt.y, btcColor) : ''}
+      <path d="${smoothPathD(pulsePts)}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+      ${isLive ? livePulseMarker(lastPulsePt.x, lastPulsePt.y, 'var(--accent)') : ''}
+      ${btcAxisLabels}
     </svg>
+    <div class="flex items-center justify-center gap-4 ${captionClass(isFullscreen)} font-mono mt-1.5">
+      <span class="flex items-center gap-1"><span class="w-2.5 h-0.5 rounded-full inline-block" style="background:var(--accent)"></span><span class="text-faint">Pulse (0&ndash;100)</span></span>
+      <span class="flex items-center gap-1"><span class="w-2.5 h-0.5 rounded-full inline-block" style="background:${btcColor}"></span><span class="text-faint">BTC cumulative return</span></span>
+    </div>
     <div class="flex justify-between items-center ${captionClass(isFullscreen)} font-mono text-faint mt-1 px-1">
       <span>${new Date(points[0].ts).toLocaleDateString()}</span>
       <span>BTC: ${lastBtc >= 0 ? '+' : ''}${lastBtc.toFixed(1)}%</span>
       <span>${new Date(points[n - 1].ts).toLocaleDateString()}</span>
     </div>`;
 
-  wireChartTooltip(container, W, totalH, points.map((_, i) => x(i)), (i) => ({
-    value: `Pulse ${points[i].marketPulse} &middot; BTC ${points[i].btcCumReturnPct >= 0 ? '+' : ''}${points[i].btcCumReturnPct.toFixed(1)}%`,
+  wireChartTooltip(container, W, H, points.map((_, i) => x(i)), (i) => ({
+    value: `Pulse ${points[i].marketPulse} &middot; BTC ${points[i].btcCumReturnPct >= 0 ? '+' : ''}${points[i].btcCumReturnPct.toFixed(1)}%${points[i].alignmentLabel ? ` &middot; ${points[i].alignmentLabel}` : ''}`,
     label: new Date(points[i].ts).toLocaleDateString(),
     y: yPulse(points[i].marketPulse),
   }));

@@ -142,6 +142,28 @@ export function classifyAlignment(marketPulseChange, btcReturnPct) {
 }
 
 /**
+ * Rolling version of classifyAlignment, for chart background bands: shows
+ * how the Pulse/BTC relationship has SHIFTED over time, not just today's
+ * single verdict. Windowed (default 6 points) rather than point-to-point
+ * so the bands show meaningful stretches instead of flip-flopping on every
+ * single tick — reuses classifyAlignment's exact thresholds and labels,
+ * no new classification logic invented here.
+ * @param points [{ts, marketPulse, btcCumReturnPct}], ascending
+ * @returns array, same length as points; null for the first `windowSize`
+ *   points (not enough trailing history yet to classify)
+ */
+export function classifyAlignmentSeries(points, windowSize = 6) {
+  if (!points || !points.length) return [];
+  return points.map((p, i) => {
+    const startIdx = i - windowSize;
+    if (startIdx < 0) return null;
+    const pulseChange = p.marketPulse - points[startIdx].marketPulse;
+    const btcChange = p.btcCumReturnPct - points[startIdx].btcCumReturnPct;
+    return classifyAlignment(pulseChange, btcChange);
+  });
+}
+
+/**
  * Deterministic "Why this reading?" text, built only from the structured
  * components already computed — never an invented narrative. Mirrors
  * engine/explain.js's buildDeterministicExplanation pattern (template over

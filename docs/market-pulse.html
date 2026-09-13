@@ -51,10 +51,17 @@
   </section>
 
   <!-- MARKET PULSE vs BTC -->
-  <section class="mb-6 bg-surface border border-border rounded-xl p-4 space-y-3">
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-      <h2 class="text-xs font-mono font-semibold text-faint uppercase tracking-wider">Market Pulse vs. BTC</h2>
-      <div class="flex items-center gap-2">
+  <section class="mb-6 glossy-card rounded-2xl p-4 sm:p-5 space-y-3">
+    <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
+      <div>
+        <h2 class="text-sm font-sans font-semibold text-ink mb-2">Market Pulse vs. BTC</h2>
+        <div class="flex items-baseline gap-3">
+          <span id="mpHeadlineValue" class="text-4xl sm:text-5xl font-sans font-bold tracking-tight text-ink">&mdash;</span>
+          <span id="mpHeadlineBtc" class="text-base font-sans font-semibold"></span>
+        </div>
+        <div id="mpAlignmentBadge" class="mt-2"></div>
+      </div>
+      <div class="flex items-center gap-2 sm:flex-col sm:items-end">
         <div id="mpRangeButtons" class="flex gap-1 overflow-x-auto no-scrollbar"></div>
         <div id="mpChartExpand"></div>
       </div>
@@ -98,7 +105,7 @@
 
 </div>
 
-<script src="app.js?v=2026091206"></script>
+<script src="app.js?v=2026091207"></script>
 <script>
 renderNav('market-pulse.html');
 
@@ -109,6 +116,13 @@ function renderMpRangeButtons() {
   renderRangeButtons('mpRangeButtons', mpRanges, mpActiveRange, (r) => { mpActiveRange = r; renderMpRangeButtons(); loadMpChart(); });
 }
 
+const ALIGNMENT_BADGE_STYLE = {
+  'Confirmation': 'color:var(--faint); background:color-mix(in srgb, var(--faint) 15%, transparent); border-color:color-mix(in srgb, var(--faint) 30%, transparent);',
+  'Bullish divergence': 'color:var(--up); background:color-mix(in srgb, var(--up) 15%, transparent); border-color:color-mix(in srgb, var(--up) 30%, transparent);',
+  'Bearish divergence': 'color:var(--down); background:color-mix(in srgb, var(--down) 15%, transparent); border-color:color-mix(in srgb, var(--down) 30%, transparent);',
+  'Market alignment': 'color:var(--faint); background:color-mix(in srgb, var(--faint) 15%, transparent); border-color:color-mix(in srgb, var(--faint) 30%, transparent);',
+};
+
 async function loadMpChart() {
   const el = document.getElementById('mpBtcChart');
   try {
@@ -118,6 +132,30 @@ async function loadMpChart() {
     const isLive = lastTs != null && (Date.now() - lastTs) < 70 * 60_000;
     renderMarketPulseBtcChart(el, btcAlignment, isLive);
     addFullscreenButton('mpChartExpand', 'Market Pulse vs. BTC', renderMarketPulseBtcChart, btcAlignment, isLive);
+
+    // Headline numbers + badge, self-contained from this same chart data —
+    // stays consistent with the bands actually drawn, rather than mixing
+    // in the separately-fetched 7-day-window alignment used elsewhere on
+    // this page.
+    const last = pts[pts.length - 1];
+    const valueEl = document.getElementById('mpHeadlineValue');
+    const btcEl = document.getElementById('mpHeadlineBtc');
+    const badgeEl = document.getElementById('mpAlignmentBadge');
+    if (last) {
+      const btcUp = last.btcCumReturnPct >= 0;
+      valueEl.textContent = last.marketPulse;
+      btcEl.innerHTML = `<span class="${btcUp ? 'text-up' : 'text-down'}">BTC ${btcUp ? '+' : ''}${last.btcCumReturnPct.toFixed(1)}%</span>`;
+      if (last.alignmentLabel) {
+        const style = ALIGNMENT_BADGE_STYLE[last.alignmentLabel] || ALIGNMENT_BADGE_STYLE['Market alignment'];
+        badgeEl.innerHTML = `<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-sans font-medium border" style="${style}">${last.alignmentLabel}</span>`;
+      } else {
+        badgeEl.innerHTML = '';
+      }
+    } else {
+      valueEl.textContent = '—';
+      btcEl.textContent = '';
+      badgeEl.innerHTML = '';
+    }
   } catch (err) {
     renderDataState(el, 'ERROR', err.message);
   }
