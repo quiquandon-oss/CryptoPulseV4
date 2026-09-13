@@ -17,6 +17,7 @@ import {
   computeNormalizedBenchmark, computePortfolioInsights, TRACKED_ASSETS,
 } from '../engine/portfolio.js';
 import * as portfolio from './portfolio.js';
+import * as predictionFunnel from './prediction_funnel.js';
 import * as marketPulse from './market_pulse.js';
 import { computeAggregatedRegime, computeCyclePosition, computeHalvingPhase, explainMarketPulse, classifyAlignment, classifyAlignmentSeries, alignMarketPulseWithBtc } from '../engine/market_pulse.js';
 import { fetchCandles } from './data-source.js';
@@ -73,6 +74,9 @@ export default {
       }
       if (parts[1] === 'portfolio' && parts[2] === 'backfill' && request.method === 'POST') {
         return await handlePortfolioBackfill(request, env);
+      }
+      if (parts[1] === 'portfolio' && parts[2] === 'prediction-funnel') {
+        return await handlePredictionFunnel(env, url);
       }
       if (parts[1] === 'portfolio' && parts[2] === 'assets') {
         return await handlePortfolioAssets(env);
@@ -265,6 +269,19 @@ async function handlePortfolioBackfill(request, env) {
   }
   const result = await portfolio.backfillHistoricalSnapshots(env);
   return json({ ok: true, ...result });
+}
+
+async function handlePredictionFunnel(env, url) {
+  const model = (url.searchParams.get('model') || 'knn').toLowerCase();
+  const horizonHours = Number(url.searchParams.get('horizon')) || 24;
+  if (model !== 'knn' && model !== 'timesfm') {
+    return json({ error: `Unknown model "${model}" — expected "knn" or "timesfm"` }, 400);
+  }
+  if (!env.V1V2_DB) {
+    return json({ model, horizonHours, funnel: null, message: 'Prediction data source not configured.' });
+  }
+  const result = await predictionFunnel.computePortfolioFunnel(env, model, horizonHours);
+  return json(result);
 }
 
 async function handlePortfolioSummary(env) {

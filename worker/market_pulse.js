@@ -6,14 +6,14 @@ import { fetchCandles } from './data-source.js';
 
 /**
  * Periodic import of V1's `history` rows into V4's own D1 (migration 0005).
- * Reads V1_DB directly (see wrangler.toml) — a D1 binding, not an HTTP call
+ * Reads V1V2_DB directly (see wrangler.toml) — a D1 binding, not an HTTP call
  * to V1's Worker, so this keeps working even if V1's Worker were deleted,
  * as long as the underlying database still exists. Called only from the
  * ingest cron path, never from a user-facing request handler.
  */
 export async function importV1History(env) {
-  if (!env.V1_DB) {
-    return { imported: 0, error: 'V1_DB binding not configured' };
+  if (!env.V1V2_DB) {
+    return { imported: 0, error: 'V1V2_DB binding not configured' };
   }
 
   const existingRows = await env.DB.prepare('SELECT ts FROM imported_v1_history ORDER BY ts DESC LIMIT 2000').all();
@@ -22,7 +22,7 @@ export async function importV1History(env) {
   // Only pull rows newer than what we already have, bounded to V1's own
   // 500-row cap anyway — no point asking for more than V1 could return.
   const latestKnownTs = existing.length ? Math.max(...existing.map((r) => r.ts)) : 0;
-  const candidateRows = await env.V1_DB.prepare(
+  const candidateRows = await env.V1V2_DB.prepare(
     'SELECT ts, score, regime_mag, btc_price FROM history WHERE ts > ? ORDER BY ts ASC LIMIT 500',
   ).bind(latestKnownTs).all();
 

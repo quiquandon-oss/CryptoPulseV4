@@ -13,17 +13,17 @@ binding = "DB"
 database_name = "cryptopulse-v4"
 database_id = "5faaf930-ea76-41d3-bef2-df630ff11875"
 
-# Second binding to V1's own physical D1 database (same database V1's own
-# Worker uses) — for the Market Pulse import job ONLY. This is a direct D1
-# binding, not an HTTP call to V1's Worker: V4 stays operational even if
-# V1's Worker were deleted entirely, as long as this D1 database still
-# exists. Read ONLY by worker/market_pulse.js's periodic import (triggered
-# by the ingest cron, never by a user-facing request handler) — the Market
-# Pulse UI and API always read from V4's own imported_v1_history table
-# (migration 0005), never this binding directly. See docs/ARCHITECTURE.md
-# "V1 independence" section.
+# Second binding to V1/V2's shared physical D1 database (same database both
+# their own Workers use) — used by the Market Pulse import job AND the
+# short-term prediction funnel feature (V2's k-NN/TimesFM prediction
+# tables live here too). A direct D1 binding, not an HTTP call to either
+# Worker: V4 stays operational even if V1's or V2's Worker were deleted
+# entirely, as long as this D1 database still exists. Read ONLY by
+# worker-side jobs, never by a user-facing request handler directly — the
+# UI always reads from V4's own imported/computed tables. See
+# docs/ARCHITECTURE.md "V1 independence" section.
 [[d1_databases]]
-binding = "V1_DB"
+binding = "V1V2_DB"
 database_name = "sentiment-history"
 database_id = "f91ca980-b886-423a-bd6f-f3baea46d181"
 
