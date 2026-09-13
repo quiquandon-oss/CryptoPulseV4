@@ -87,6 +87,20 @@
     <div id="heroChart" class="min-h-[100px]"><div class="chart-skeleton w-full" style="height:220px"></div></div>
   </section>
 
+  <!-- MARKET PULSE TEASER -->
+  <section class="mb-5">
+    <a href="market-pulse.html" class="glossy-card rounded-2xl p-4 sm:p-5 flex items-center gap-4 transition-all">
+      <div id="mpTeaserGauge" class="shrink-0 w-24">
+        <div class="chart-skeleton" style="width:96px; height:56px; border-radius:48px 48px 0 0;"></div>
+      </div>
+      <div class="min-w-0 flex-1">
+        <span class="text-xs font-sans text-faint block">Market Pulse</span>
+        <span id="mpTeaserText" class="text-sm font-sans text-faint block">Loading&hellip;</span>
+      </div>
+      <span class="text-xs font-sans text-accent shrink-0">View &rarr;</span>
+    </a>
+  </section>
+
   <!-- SYSTEM STATUS BANNER -->
   <section class="mb-5">
     <a href="health.html" id="systemStatusBanner" class="block bg-surface border border-border rounded-xl p-3.5 hover:border-border-strong transition-all">
@@ -112,6 +126,7 @@
     <div id="overviewCards" class="grid grid-cols-1 gap-3 sm:grid-cols-3">
       <div class="bg-surface border border-border rounded-xl p-4 text-xs font-sans text-faint">Loading market overview…</div>
     </div>
+    <p class="text-[11px] text-faint font-sans mt-2">SOL and HYPE aren't tracked by the signal engine yet &mdash; shown on My Assets, not here.</p>
   </section>
 
   <footer class="flex items-center justify-between text-[11px] font-sans text-faint mt-8 pt-4 border-t border-border">
@@ -120,7 +135,7 @@
   </footer>
 </div>
 
-<script src="app.js?v=2026091213"></script>
+<script src="app.js?v=2026091214"></script>
 <script>
 renderNav('index.html');
 
@@ -224,6 +239,24 @@ function initHeroChart() {
     }
   } catch {
     el.heroContent.innerHTML = '<p class="text-sm font-sans text-faint">Portfolio details unavailable.</p>';
+  }
+
+  // 2b. Fetch Market Pulse teaser
+  try {
+    const mp = await v4Fetch('/api/market-pulse');
+    const gaugeEl = document.getElementById('mpTeaserGauge');
+    const textEl = document.getElementById('mpTeaserText');
+    if (mp.marketPulse == null) {
+      renderMiniGaugeArc(gaugeEl, null, null);
+      textEl.textContent = 'Insufficient evidence right now';
+    } else {
+      renderMiniGaugeArc(gaugeEl, mp.marketPulse, mp.label);
+      const color = mp.label === 'BULLISH' ? 'text-up' : mp.label === 'BEARISH' ? 'text-down' : 'text-warn';
+      textEl.innerHTML = `<span class="font-semibold ${color}">${mp.marketPulse} &middot; ${mp.label}</span>${mp.partial ? ' <span class="text-faint">(partial)</span>' : ''}`;
+    }
+  } catch {
+    const textEl = document.getElementById('mpTeaserText');
+    if (textEl) textEl.textContent = 'Unavailable right now';
   }
 
   // 3. Fetch Market Overview

@@ -824,6 +824,29 @@ function addFullscreenButtonWithRange(buttonContainerId, title, ranges, getActiv
 // Semicircle arc, 0-100. Colored by label (BULLISH/NEUTRAL/BEARISH) — never
 // a separate gauge per driver, per spec ("Cycle and Sentiment are
 // supporting drivers, not competing gauges").
+/** Minimal arc-only version for small teaser slots (e.g. the Dashboard) —
+ * the full renderMarketPulseGauge bakes in large embedded text sized for a
+ * full page and would look broken forced into a small container. No glow
+ * either, since a teaser doesn't need the "wow" treatment its own full page
+ * already has. */
+function renderMiniGaugeArc(container, marketPulse, label) {
+  if (marketPulse == null) {
+    container.innerHTML = '<div class="w-full h-14 flex items-center justify-center text-faint text-[10px] font-sans">N/A</div>';
+    return;
+  }
+  const W = 220, H = 130, cx = 110, cy = 110, r = 90;
+  const fullLength = Math.PI * r;
+  const fillLength = (marketPulse / 100) * fullLength;
+  const color = label === 'BULLISH' ? 'var(--up)' : label === 'BEARISH' ? 'var(--down)' : 'var(--warn)';
+  const startX = cx - r, endX = cx + r;
+  container.innerHTML = `
+    <svg viewBox="0 0 ${W} ${H}" class="w-full h-auto">
+      <path d="M${startX},${cy} A${r},${r} 0 0,1 ${endX},${cy}" fill="none" stroke="var(--border)" stroke-width="16" stroke-linecap="round"/>
+      <path d="M${startX},${cy} A${r},${r} 0 0,1 ${endX},${cy}" fill="none" stroke="${color}" stroke-width="16" stroke-linecap="round"
+        stroke-dasharray="${fillLength.toFixed(1)} ${fullLength.toFixed(1)}"/>
+    </svg>`;
+}
+
 function renderMarketPulseGauge(container, marketPulse, label, regimeText) {
   if (marketPulse == null) {
     renderDataState(container, 'INSUFFICIENT_DATA', 'Insufficient evidence to determine the current Market Pulse.');
