@@ -83,7 +83,7 @@
       </div>
     </div>
     <div id="chartContainer" class="min-h-[160px] p-1">
-      <p class="text-xs text-faint text-center py-8">Loading chart…</p>
+      <div class="chart-skeleton w-full" style="height:180px"></div>
     </div>
   </section>
 
@@ -117,7 +117,7 @@
 
 </div>
 
-<script src="app.js?v=2026091204"></script>
+<script src="app.js?v=2026091205"></script>
 <script>
 renderNav('asset.html');
 
@@ -223,20 +223,14 @@ renderNav('asset.html');
   // Price & Signal Timeline Chart
   const ranges = ['12h', '24h', '7d', '30d'];
   let activeRange = '7d';
-  const rangeBtnEl = document.getElementById('rangeButtons');
   const chartEl = document.getElementById('chartContainer');
 
-  function renderRangeButtons() {
-    rangeBtnEl.innerHTML = ranges.map((r) =>
-      `<button data-range="${r}" class="text-[10px] font-mono px-2.5 py-1 rounded-md border transition-all ${r === activeRange ? 'border-accent-30 bg-accent-soft text-accent font-semibold' : 'border-border text-faint hover:text-muted hover:bg-elevated'}">${r}</button>`
-    ).join('');
-    rangeBtnEl.querySelectorAll('button').forEach((btn) => {
-      btn.addEventListener('click', () => { activeRange = btn.dataset.range; renderRangeButtons(); loadChart(); });
-    });
+  function drawRangeButtons() {
+    renderRangeButtons('rangeButtons', ranges, activeRange, (r) => { activeRange = r; drawRangeButtons(); loadChart(); });
   }
 
   async function loadChart() {
-    chartEl.innerHTML = '<div class="px-4 py-8 text-center text-xs font-mono text-faint">Loading chart…</div>';
+    chartEl.innerHTML = chartSkeletonHtml(180);
     try {
       const { points } = await v4Fetch(`/api/assets/${asset}/history?range=${activeRange}`);
       renderPriceSignalChart(chartEl, points, activeRange);
@@ -246,7 +240,7 @@ renderNav('asset.html');
     }
   }
 
-  renderRangeButtons();
+  drawRangeButtons();
   loadChart();
 
   // Resolved Model Performance

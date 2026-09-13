@@ -104,7 +104,7 @@
           <div id="valueChartExpand"></div>
         </div>
       </div>
-      <div id="valueChart" class="p-1 min-h-[140px]"></div>
+      <div id="valueChart" class="p-1 min-h-[140px]"><div class="chart-skeleton w-full" style="height:220px"></div></div>
     </section>
 
     <!-- Visualization 2: Cumulative Net P/L -->
@@ -113,7 +113,7 @@
         <h2 class="text-xs font-mono font-semibold text-faint uppercase tracking-wider">Cumulative Net P/L</h2>
         <div id="pnlChartExpand"></div>
       </div>
-      <div id="pnlChart" class="p-1 min-h-[140px]"></div>
+      <div id="pnlChart" class="p-1 min-h-[140px]"><div class="chart-skeleton w-full" style="height:200px"></div></div>
     </section>
   </div>
 
@@ -123,7 +123,7 @@
       <h2 class="text-xs font-mono font-semibold text-faint uppercase tracking-wider">Portfolio vs. BTC Benchmark (Normalized Base = 100)</h2>
       <div id="benchmarkChartExpand"></div>
     </div>
-    <div id="benchmarkChart" class="p-1 min-h-[140px]"></div>
+    <div id="benchmarkChart" class="p-1 min-h-[140px]"><div class="chart-skeleton w-full" style="height:180px"></div></div>
   </section>
 
   <!-- STATEMENT IMPORT (COLLAPSIBLE AT LOWER PAGE) -->
@@ -157,7 +157,7 @@
 
 </div>
 
-<script src="app.js?v=2026091204"></script>
+<script src="app.js?v=2026091205"></script>
 <script>
 renderNav('portfolio.html');
 
@@ -364,10 +364,8 @@ async function loadAllocation() {
 
 const ranges = ['1W', '1M', '3M', '6M', '1Y', 'ALL'];
 let activeRange = 'ALL';
-function renderRangeButtons() {
-  const el = document.getElementById('rangeButtons');
-  el.innerHTML = ranges.map((r) => `<button data-range="${r}" class="text-[10px] font-mono px-2 py-0.5 rounded border ${r === activeRange ? 'border-accent-30 bg-accent-soft text-accent' : 'border-border text-faint hover-bg-elevated'}">${r}</button>`).join('');
-  el.querySelectorAll('button').forEach((btn) => btn.addEventListener('click', () => { activeRange = btn.dataset.range; renderRangeButtons(); loadValueChart(); }));
+function drawRangeButtons() {
+  renderRangeButtons('rangeButtons', ranges, activeRange, (r) => { activeRange = r; drawRangeButtons(); loadValueChart(); });
 }
 
 async function loadValueChart() {
@@ -434,7 +432,7 @@ function loadAll() {
   loadHistoryStatus();
 }
 
-renderRangeButtons();
+drawRangeButtons();
 loadAll();
 </script>
 </body>

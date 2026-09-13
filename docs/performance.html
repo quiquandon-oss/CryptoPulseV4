@@ -58,7 +58,7 @@
 
     <!-- Chart Container -->
     <div id="perfValueChart" class="min-h-[160px]">
-      <p class="text-xs font-mono text-faint text-center py-8">Loading chart…</p>
+      <div class="chart-skeleton w-full" style="height:220px"></div>
     </div>
 
     <!-- Stats Below Chart: Best Asset, Worst Asset, Transaction Count -->
@@ -120,7 +120,7 @@
 
 </div>
 
-<script src="app.js?v=2026091204"></script>
+<script src="app.js?v=2026091205"></script>
 <script>
 renderNav('performance.html');
 
@@ -129,19 +129,7 @@ const ranges = ['1W', '1M', '3M', '6M', '1Y', 'ALL'];
 let activeRange = 'ALL';
 
 function renderPeriodSelector() {
-  const container = document.getElementById('perfPeriodSelector');
-  container.innerHTML = ranges.map((r) => `
-    <button data-range="${r}" class="text-[10px] font-mono px-2.5 py-1 rounded-md border transition-all ${r === activeRange ? 'border-accent-30 bg-accent-soft text-accent font-semibold' : 'border-border text-faint hover:text-muted hover:bg-elevated'}">
-      ${r}
-    </button>`).join('');
-
-  container.querySelectorAll('button').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      activeRange = btn.dataset.range;
-      renderPeriodSelector();
-      loadPortfolioValueChart();
-    });
-  });
+  renderRangeButtons('perfPeriodSelector', ranges, activeRange, (r) => { activeRange = r; renderPeriodSelector(); loadPortfolioValueChart(); });
 }
 
 async function loadPortfolioValueChart() {

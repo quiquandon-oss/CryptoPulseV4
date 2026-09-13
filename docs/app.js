@@ -679,6 +679,30 @@ const EXPAND_ICON_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="n
 /** Renders an expand button into `buttonContainerId` that opens the same
  * chart, at the same data, in the fullscreen modal. Call this right after
  * the chart's normal (non-fullscreen) render, with the same args. */
+/**
+ * The one range-button renderer used everywhere. Previously duplicated
+ * independently in asset.html, portfolio.html, market-pulse.html, and
+ * performance.html — two of those four had actually-dead CSS
+ * (hover:text-muted / hover:bg-elevated are Tailwind pseudo-class syntax,
+ * but text-muted/bg-elevated are this app's own plain custom classes, not
+ * Tailwind utilities, so Tailwind's CDN compiler never generated a hover
+ * variant for them at all). Consolidating to one function fixes that as a
+ * side effect, and guarantees identical spacing/styling everywhere from now on.
+ */
+/** Shimmering placeholder shaped like the chart about to appear — replaces
+ * plain "Loading…" text, which was especially noticeable on mobile where
+ * load times are more visible. `heightPx` should roughly match the chart's
+ * eventual rendered height so nothing visibly jumps when real data arrives. */
+function chartSkeletonHtml(heightPx = 180) {
+  return `<div class="chart-skeleton w-full" style="height:${heightPx}px"></div>`;
+}
+
+function renderRangeButtons(containerId, ranges, activeRange, onSelect) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  el.innerHTML = ranges.map((r) => `<button data-range="${r}" class="text-[10px] font-mono px-2.5 py-1 rounded-md border transition-colors touch-target-sm ${r === activeRange ? 'border-accent-30 bg-accent-soft text-accent font-semibold' : 'border-border text-faint hover-text-muted hover-bg-elevated'}">${r}</button>`).join('');
+  el.querySelectorAll('button').forEach((btn) => btn.addEventListener('click', () => onSelect(btn.dataset.range)));
+}
 function addFullscreenButton(buttonContainerId, title, renderFn, ...args) {
   const el = document.getElementById(buttonContainerId);
   if (!el) return;

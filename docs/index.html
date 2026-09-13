@@ -77,7 +77,7 @@
       <div id="heroRangeButtons" class="flex gap-1 overflow-x-auto no-scrollbar"></div>
       <div id="heroChartExpand"></div>
     </div>
-    <div id="heroChart" class="min-h-[100px]"></div>
+    <div id="heroChart" class="min-h-[100px]"><div class="chart-skeleton w-full" style="height:220px"></div></div>
   </section>
 
   <!-- SYSTEM STATUS BANNER -->
@@ -113,7 +113,7 @@
   </footer>
 </div>
 
-<script src="app.js?v=2026091204"></script>
+<script src="app.js?v=2026091205"></script>
 <script>
 renderNav('index.html');
 
@@ -121,15 +121,17 @@ const heroRanges = ['1W', '1M', '3M', '6M', '1Y', 'ALL'];
 let heroActiveRange = 'ALL'; // defaults to ALL, not 24H like V1 — that's where the real multi-month history actually shows; a 24H default would look near-empty until snapshots log more densely.
 let heroChartInitialized = false;
 function renderHeroRangeButtons() {
-  const el = document.getElementById('heroRangeButtons');
-  el.innerHTML = heroRanges.map((r) => `<button data-range="${r}" class="text-[10px] font-mono px-2 py-0.5 rounded border ${r === heroActiveRange ? 'border-accent-30 bg-accent-soft text-accent' : 'border-border text-faint hover-bg-elevated'}">${r}</button>`).join('');
-  el.querySelectorAll('button').forEach((btn) => btn.addEventListener('click', () => { heroActiveRange = btn.dataset.range; renderHeroRangeButtons(); loadHeroChart(); }));
+  renderRangeButtons('heroRangeButtons', heroRanges, heroActiveRange, (r) => { heroActiveRange = r; renderHeroRangeButtons(); loadHeroChart(); });
 }
 async function loadHeroChart() {
   const chartEl = document.getElementById('heroChart');
   try {
     const { points } = await v4Fetch(`/api/portfolio/history?range=${heroActiveRange}`);
-    renderPortfolioValueChart(chartEl, points);
+    // Same RECENT threshold as engine/freshness.js (70 min) — the pulse
+    // marker must never claim liveness the freshness system wouldn't back.
+    const lastTs = points?.length ? points[points.length - 1].ts : null;
+    const isLive = lastTs != null && (Date.now() - lastTs) < 70 * 60_000;
+    renderPortfolioValueChart(chartEl, points, { showLivePulse: true, isLive });
     addFullscreenButton('heroChartExpand', 'Total Portfolio Value', renderPortfolioValueChart, points);
   } catch (err) {
     renderDataState(chartEl, 'ERROR', err.message);

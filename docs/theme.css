@@ -172,6 +172,15 @@ body { font-feature-settings: "tnum" 1, "cv05" 1; transition: background-color 0
   align-items: center;
   justify-content: center;
 }
+/* Secondary minimum for dense rows (range-button strips) where full 44px
+   would make a 6-button row unwieldy — 36px is the accepted minimum for
+   less-critical, densely-packed controls per Material Design guidance. */
+.touch-target-sm {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 
 /* Accordion Component */
 .accordion-header {
