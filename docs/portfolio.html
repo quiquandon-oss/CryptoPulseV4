@@ -186,7 +186,7 @@
 
 </div>
 
-<script src="app.js?v=2026091216"></script>
+<script src="app.js?v=2026091217"></script>
 <script>
 renderNav('portfolio.html');
 
@@ -200,15 +200,27 @@ async function handleNeverlessFile(file) {
 }
 
 async function handleRevolutFile(file) {
-  const rateStr = prompt("Revolut statement contains EUR transactions. Enter verified EUR/USD conversion rate (e.g. 1.08):");
-  if (!rateStr) {
-    document.getElementById('uploadStatus').textContent = 'Import cancelled — Revolut EUR statements require an explicit verified EUR/USD rate.';
-    return;
-  }
-  const eurUsdRate = parseFloat(rateStr);
-  if (!Number.isFinite(eurUsdRate) || eurUsdRate <= 0) {
-    document.getElementById('uploadStatus').textContent = 'Invalid EUR/USD rate entered.';
-    return;
+  document.getElementById('uploadStatus').textContent = 'Looking up EUR/USD rate…';
+  let eurUsdRate;
+  try {
+    const fxData = await v4Fetch('/api/fx/eur-usd');
+    eurUsdRate = fxData.rate;
+    const ageHours = ((Date.now() - fxData.fetchedAt) / 3_600_000).toFixed(1);
+    document.getElementById('uploadStatus').textContent = `Using EUR/USD rate ${eurUsdRate.toFixed(4)} (${fxData.fromCache ? `cached, ${ageHours}h old` : 'just fetched'})…`;
+  } catch (err) {
+    // Automatic lookup failed (network issue, endpoint down) — fall back
+    // to manual entry rather than blocking the import entirely, but this
+    // is now the exception path, not the default experience.
+    const rateStr = prompt(`Couldn't auto-fetch the EUR/USD rate (${err.message}). Enter a verified rate manually (e.g. 1.16):`);
+    if (!rateStr) {
+      document.getElementById('uploadStatus').textContent = 'Import cancelled — Revolut EUR statements require a EUR/USD rate.';
+      return;
+    }
+    eurUsdRate = parseFloat(rateStr);
+    if (!Number.isFinite(eurUsdRate) || eurUsdRate <= 0) {
+      document.getElementById('uploadStatus').textContent = 'Invalid EUR/USD rate entered.';
+      return;
+    }
   }
 
   const isCsv = /\.csv$/i.test(file.name);

@@ -17,6 +17,7 @@ import {
   computeNormalizedBenchmark, computePortfolioInsights, TRACKED_ASSETS,
 } from '../engine/portfolio.js';
 import * as portfolio from './portfolio.js';
+import * as fx from './fx.js';
 import * as predictionFunnel from './prediction_funnel.js';
 import * as marketPulse from './market_pulse.js';
 import { computeAggregatedRegime, computeCyclePosition, computeHalvingPhase, explainMarketPulse, classifyAlignment, classifyAlignmentSeries, alignMarketPulseWithBtc } from '../engine/market_pulse.js';
@@ -77,6 +78,9 @@ export default {
       }
       if (parts[1] === 'portfolio' && parts[2] === 'prediction-funnel') {
         return await handlePredictionFunnel(env, url);
+      }
+      if (parts[1] === 'fx' && parts[2] === 'eur-usd') {
+        return await handleEurUsdRate(env);
       }
       if (parts[1] === 'portfolio' && parts[2] === 'assets') {
         return await handlePortfolioAssets(env);
@@ -285,6 +289,11 @@ async function handlePredictionFunnel(env, url) {
   }
   const result = await predictionFunnel.computePortfolioFunnel(env, model, horizonHours);
   return json(result);
+}
+
+async function handleEurUsdRate(env) {
+  const { rate, fetchedAt, fromCache } = await fx.getOrRefreshEurUsdRate(env);
+  return json({ pair: 'EURUSD', rate, fetchedAt, fromCache });
 }
 
 async function handleAssetPredictionFunnel(env, assetId, url) {

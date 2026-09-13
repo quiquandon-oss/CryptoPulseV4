@@ -4,7 +4,8 @@
 // engine/portfolio.js; this file only touches D1 and the market data source.
 
 import { TRACKED_ASSETS, computeHoldings, computePortfolioSummary, dedupeTransactions, computeAccruedInterestEur, reconstructHistoricalSnapshots } from '../engine/portfolio.js';
-import { fetchCandles, fetchEurUsdRate, fetchHistoricalEurUsdRate } from './data-source.js';
+import { fetchCandles, fetchHistoricalEurUsdRate } from './data-source.js';
+import { getOrRefreshEurUsdRate } from './fx.js';
 
 export async function getCurrentPrices(env) {
   const prices = {};
@@ -23,10 +24,10 @@ export async function getCurrentPrices(env) {
 }
 
 /** Ported cash-interest figure (see engine/portfolio.js) converted to USD at a live rate. */
-export async function getCashInterest(now = Date.now()) {
+export async function getCashInterest(env, now = Date.now()) {
   const dateStr = new Date(now).toISOString().slice(0, 10);
   const eur = computeAccruedInterestEur(dateStr);
-  const fx = await fetchEurUsdRate();
+  const { rate: fx } = await getOrRefreshEurUsdRate(env, now);
   return { eur, usd: eur * fx, fx };
 }
 
@@ -38,7 +39,7 @@ export async function getCashInterest(now = Date.now()) {
 export async function buildPortfolioSummary(env, now = Date.now()) {
   const transactions = await getAllTransactions(env.DB);
   const holdings = computeHoldings(transactions);
-  const [prices, cashInterest] = await Promise.all([getCurrentPrices(env), getCashInterest(now)]);
+  const [prices, cashInterest] = await Promise.all([getCurrentPrices(env), getCashInterest(env, now)]);
   return computePortfolioSummary(holdings, prices, cashInterest);
 }
 
