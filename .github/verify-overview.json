@@ -1,0 +1,52 @@
+{
+    "overview": [
+        {
+            "asset": "BTC",
+            "name": "Bitcoin",
+            "price": 78505,
+            "change24h": 0.017088591195294482,
+            "signal": {
+                "direction": "BULLISH",
+                "score": 6,
+                "evidenceLabel": "6/6 indicators bullish",
+                "regime": "TRENDING_BULLISH",
+                "risk": "LOW",
+                "persistenceCount": 2,
+                "stability": "UNSTABLE",
+                "ts": 1789387200000
+            }
+        },
+        {
+            "asset": "ETH",
+            "name": "Ethereum",
+            "price": 2504.2,
+            "change24h": 0.00513767359717417,
+            "signal": {
+                "direction": "BULLISH",
+                "score": 6,
+                "evidenceLabel": "6/6 indicators bullish",
+                "regime": "RANGE_BOUND",
+                "risk": "LOW",
+                "persistenceCount": 2,
+                "stability": "UNSTABLE",
+                "ts": 1789387200000
+            }
+        },
+        {
+            "asset": "LINK",
+            "name": "Chainlink",
+            "price": 11.413,
+            "change24h": 0.009196215403660888,
+            "signal": {
+                "direction": "BULLISH",
+                "score": 6,
+                "evidenceLabel": "6/6 indicators bullish",
+                "regime": "RANGE_BOUND",
+                "risk": "LOW",
+                "persistenceCount": 2,
+                "stability": "UNSTABLE",
+                "ts": 1789387200000
+            }
+        }
+    ]
+}
