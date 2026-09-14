@@ -1,0 +1,19 @@
+name: Verify Market Overview fix (one-off)
+on:
+  workflow_dispatch: {}
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch market overview
+        run: |
+          curl -s "${{ secrets.V4_WORKER_URL }}/api/market/overview" -o /tmp/overview.json
+          python3 -m json.tool /tmp/overview.json > .github/verify-overview.json
+          git config user.email "ci@cryptopulse.local"
+          git config user.name "CI Verification"
+          git add .github/verify-overview.json
+          git commit -m "chore: capture live market overview response" || echo "nothing to commit"
+          git push
