@@ -12,6 +12,7 @@ import * as db from './db.js';
 import { runIngestCycle } from './ingest.js';
 import { aggregateHealth } from '../engine/health.js';
 import { computePerformance } from '../engine/performance.js';
+import { computePercentChange } from '../engine/indicators.js';
 import {
   parseNeverlessCSV, parseRevolutRows, parseV1Export,
   computeNormalizedBenchmark, computePortfolioInsights, TRACKED_ASSETS,
@@ -143,12 +144,21 @@ async function handleHealth(env) {
 
 async function handleMarketOverview(env) {
   const assets = await db.listAssets(env.DB);
+  const prices = await portfolio.getCurrentPrices(env);
+  const dayAgo = Date.now() - 24 * 3_600_000;
   const overview = [];
   for (const asset of assets) {
     const signal = await db.getLastSignal(env.DB, asset.id);
+    const price = prices[asset.id] ?? null;
+    const priceDayAgoRow = await env.DB
+      .prepare('SELECT close FROM market_observations WHERE asset_id = ? AND ts <= ? ORDER BY ts DESC LIMIT 1')
+      .bind(asset.id, dayAgo).first();
+    const change24h = computePercentChange(price, priceDayAgoRow?.close ?? null);
     overview.push({
       asset: asset.id,
       name: asset.name,
+      price,
+      change24h,
       signal: signal ? {
         direction: signal.direction, score: signal.score, evidenceLabel: signal.evidence_label,
         regime: signal.regime, risk: signal.risk, persistenceCount: signal.persistence_count,

@@ -5,6 +5,15 @@
 // No I/O, no randomness, no AI. Every function documents its interpretation rule
 // so the evidence/agreement engine can consume it without re-deriving meaning.
 
+/** Fractional change from `previous` to `current` (e.g. 0.0234 for +2.34%).
+ * Returns null rather than dividing by zero or NaN when either input is
+ * missing or previous is exactly 0 — never fabricates a change figure from
+ * incomplete data. */
+export function computePercentChange(current, previous) {
+  if (current == null || previous == null || !Number.isFinite(current) || !Number.isFinite(previous) || previous === 0) return null;
+  return (current - previous) / previous;
+}
+
 /** Simple moving average of the last `period` closes. */
 export function sma(candles, period) {
   if (candles.length < period) return null;

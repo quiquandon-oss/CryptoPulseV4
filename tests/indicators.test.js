@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   sma, ema, rsi, macd, bollingerBands, atr, ichimoku, momentum, volatility,
-  computeIndicatorSnapshot,
+  computeIndicatorSnapshot, computePercentChange,
 } from '../engine/indicators.js';
 
 function makeCandles(closes, { high, low, start = 1_700_000_000_000, stepMs = 3_600_000 } = {}) {
@@ -125,4 +125,35 @@ test('computeIndicatorSnapshot: full fields populate with enough history', () =>
   assert.ok(snapshot.sma20 !== null);
   assert.ok(snapshot.rsi14 !== null);
   assert.ok(snapshot.ichimokuTenkan !== null);
+});
+
+// --- computePercentChange ---
+
+test('computePercentChange: standard positive change', () => {
+  const r = computePercentChange(110, 100);
+  assert.ok(Math.abs(r - 0.1) < 1e-9);
+});
+
+test('computePercentChange: standard negative change', () => {
+  const r = computePercentChange(90, 100);
+  assert.ok(Math.abs(r - -0.1) < 1e-9);
+});
+
+test('computePercentChange: null current or previous returns null, never fabricated', () => {
+  assert.equal(computePercentChange(null, 100), null);
+  assert.equal(computePercentChange(100, null), null);
+  assert.equal(computePercentChange(null, null), null);
+});
+
+test('computePercentChange: zero previous returns null rather than dividing by zero', () => {
+  assert.equal(computePercentChange(100, 0), null);
+});
+
+test('computePercentChange: NaN or non-finite inputs return null', () => {
+  assert.equal(computePercentChange(NaN, 100), null);
+  assert.equal(computePercentChange(100, Infinity), null);
+});
+
+test('computePercentChange: no change returns exactly 0', () => {
+  assert.equal(computePercentChange(100, 100), 0);
 });
