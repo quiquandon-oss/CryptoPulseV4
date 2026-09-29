@@ -3,7 +3,7 @@
 // I/O layer for the portfolio feature. Pure calculation lives in
 // engine/portfolio.js; this file only touches D1 and the market data source.
 
-import { TRACKED_ASSETS, computeHoldings, computePortfolioSummary, dedupeTransactions, computeAccruedInterestEur, reconstructHistoricalSnapshots } from '../engine/portfolio.js';
+import { TRACKED_ASSETS, computeHoldings, computePortfolioSummary, dedupeTransactions, dropAlreadyRecorded, computeAccruedInterestEur, reconstructHistoricalSnapshots } from '../engine/portfolio.js';
 import { fetchCandles, fetchHistoricalEurUsdRate } from './data-source.js';
 import { getOrRefreshEurUsdRate } from './fx.js';
 
@@ -44,8 +44,14 @@ export async function buildPortfolioSummary(env, now = Date.now()) {
 }
 
 export async function insertTransactions(db, transactions) {
-  const deduped = dedupeTransactions(transactions);
-  if (!deduped.length) return { inserted: 0, received: transactions.length, newTransactions: [] };
+  const candidates = dedupeTransactions(transactions);
+  if (!candidates.length) return { inserted: 0, received: transactions.length, newTransactions: [] };
+
+  const existing = await getAllTransactions(db);
+  const { fresh: deduped, alreadyRecorded } = dropAlreadyRecorded(candidates, existing);
+  if (!deduped.length) {
+    return { inserted: 0, received: transactions.length, deduped: 0, alreadyRecorded: alreadyRecorded.length, newTransactions: [] };
+  }
 
   const stmt = db.prepare(
     `INSERT OR IGNORE INTO portfolio_transactions
@@ -64,7 +70,7 @@ export async function insertTransactions(db, transactions) {
   // transactions are new, matching V1's "show the result immediately."
   const newTransactions = deduped.filter((_, i) => (results[i]?.meta?.changes ?? 0) > 0);
   const inserted = newTransactions.length;
-  return { inserted, received: transactions.length, deduped: deduped.length, newTransactions };
+  return { inserted, received: transactions.length, deduped: deduped.length, alreadyRecorded: alreadyRecorded.length, newTransactions };
 }
 
 export async function getAllTransactions(db) {

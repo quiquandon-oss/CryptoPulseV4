@@ -108,7 +108,11 @@ export function parseRevolutRows(rows, eurUsdRate) {
     if (type !== 'TRANSFER_IN' && !Number.isFinite(priceUsd)) return;
 
     out.push({
-      sourceId: `rev_${asset}_${ts}_${qty}_${priceUsd}`,
+      // The USD price is derived from the caller-supplied EUR->USD rate, which is
+      // different on every import — putting it in the ID gave the same Revolut row
+      // a NEW id each time, so INSERT OR IGNORE never ignored it and every re-import
+      // added another copy (BTC/LINK staking rewards were counted up to 5x).
+      sourceId: `rev_${asset}_${ts}_${qty}_${type}`,
       asset, account: 'Revolut',
       type,
       quantity: qty,
@@ -318,6 +322,46 @@ export function dedupeTransactions(transactions) {
     out.push(tx);
   }
   return out;
+}
+
+const MS_PER_DAY = 86400000;
+function recordedKey(tx) {
+  return [tx.asset, tx.account, tx.type, Number(tx.quantity).toFixed(12), Math.floor(tx.timestamp / MS_PER_DAY)].join('|');
+}
+
+/**
+ * Splits incoming transactions into ones genuinely new to the ledger and ones the
+ * ledger already has, matching on asset + account + type + quantity + UTC day
+ * regardless of source or id. Needed because the same real event can arrive
+ * under different ids: a V1 export (midnight timestamp, `v1_` id) and a Revolut
+ * statement (exact timestamp, `rev_` id), or a Revolut row imported before the id
+ * became rate-independent. Matching is count-aware — each already-recorded row
+ * absorbs at most ONE incoming row — so two genuinely separate same-day,
+ * same-size transactions are both kept when neither is on record yet.
+ *
+ * @param {Array<Object>} incoming   normalized transactions about to be inserted
+ * @param {Array<Object>} existing   normalized transactions already in the ledger
+ * @returns {{fresh: Array<Object>, alreadyRecorded: Array<Object>}}
+ */
+export function dropAlreadyRecorded(incoming, existing) {
+  const remaining = new Map();
+  for (const tx of existing) {
+    const key = recordedKey(tx);
+    remaining.set(key, (remaining.get(key) ?? 0) + 1);
+  }
+  const fresh = [];
+  const alreadyRecorded = [];
+  for (const tx of incoming) {
+    const key = recordedKey(tx);
+    const left = remaining.get(key) ?? 0;
+    if (left > 0) {
+      remaining.set(key, left - 1);
+      alreadyRecorded.push(tx);
+    } else {
+      fresh.push(tx);
+    }
+  }
+  return { fresh, alreadyRecorded };
 }
 
 /**
