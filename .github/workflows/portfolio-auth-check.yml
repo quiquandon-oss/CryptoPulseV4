@@ -1,0 +1,60 @@
+name: Portfolio auth check
+
+# Read-only, on-demand verification of the portfolio privacy gate against the
+# deployed Worker. Prints only HTTP status, the Cache-Control/Vary headers,
+# record counts and field names -- never response values or the token
+# (GitHub also masks the secret). No writes, no deploy.
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check anonymous, wrong-token and authenticated access
+        env:
+          BASE: https://cryptopulse-v4.quiquandon.workers.dev
+          TOKEN: ${{ secrets.V4_PORTFOLIO_READ_TOKEN }}
+        run: |
+          set -uo pipefail
+          [ -n "$TOKEN" ] || { echo "::error::V4_PORTFOLIO_READ_TOKEN not available"; exit 1; }
+          fail=0
+          probe() { # label path expected_status [auth] [method]
+            local label=$1 path=$2 want=$3 auth=${4:-} method=${5:-GET}
+            local args=(-sS --max-time 60 -X "$method" -D h.txt -o b.json -w '%{http_code}')
+            [ "$auth" = token ] && args+=(-H "Authorization: Bearer $TOKEN")
+            [ "$auth" = wrong ] && args+=(-H "Authorization: Bearer not-the-token")
+            local code; code=$(curl "${args[@]}" "$BASE$path" || echo ERR)
+            local cc; cc=$(grep -i '^cache-control:' h.txt | tr -d '\r' | cut -d' ' -f2- || true)
+            local vary; vary=$(grep -i '^vary:' h.txt | tr -d '\r' | cut -d' ' -f2- || true)
+            local shape; shape=$(python3 -c "
+          import json
+          try: j=json.load(open('b.json'))
+          except Exception: print('non-JSON'); raise SystemExit
+          def s(v):
+              if isinstance(v,list): return f'list[{len(v)}]'
+              if isinstance(v,dict): return '{'+','.join(sorted(v))+'}'
+              return type(v).__name__
+          print('; '.join(f'{k}:{s(v)}' for k,v in j.items()) if isinstance(j,dict) else s(j))")
+            local ok=PASS; [ "$code" = "$want" ] || { ok=FAIL; fail=1; }
+            echo "| $ok | $label | $path | $code (want $want) | ${cc:--} | ${vary:--} | $shape |" | tee -a "$GITHUB_STEP_SUMMARY"
+            LAST_CC=$cc
+          }
+          echo '| result | case | path | HTTP | Cache-Control | Vary | body shape (no values) |' | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '|---|---|---|---|---|---|---|' | tee -a "$GITHUB_STEP_SUMMARY"
+          for p in /api/portfolio /api/portfolio/transactions /api/portfolio/assets /api/portfolio/history /api/portfolio/allocation /api/portfolio/data-health; do
+            probe anonymous "$p" 401
+            [ "$LAST_CC" = "private, no-store" ] || { echo "::error::$p anonymous missing private, no-store"; fail=1; }
+            probe wrong-token "$p" 401 wrong
+            probe authenticated "$p" 200 token
+            [ "$LAST_CC" = "private, no-store" ] || { echo "::error::$p authenticated missing private, no-store"; fail=1; }
+          done
+          probe anonymous-POST /api/portfolio/transactions 404 '' POST
+          probe anonymous /api/assets/BTC 200
+          python3 -c "import json;j=json.load(open('b.json'));assert j.get('position') is None and j.get('position_requires_auth') is True" && echo "| PASS | anonymous asset detail has no position |" | tee -a "$GITHUB_STEP_SUMMARY" || { echo "::error::asset detail exposes position"; fail=1; }
+          for p in /api/health /api/signals /api/market-pulse /api/market/overview /api/performance; do probe public "$p" 200; done
+          exit $fail
