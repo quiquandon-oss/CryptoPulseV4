@@ -8,8 +8,22 @@
 // nothing even though the source is correct.
 window.V4_API_BASE = localStorage.getItem('v4-api-base-override') || 'https://cryptopulse-v4.quiquandon.workers.dev';
 
+// Portfolio data (holdings, transactions, P&L) needs the read token from
+// Settings (the Worker's PORTFOLIO_READ_TOKEN secret). It is stored only in
+// this browser and sent only to the V4 Worker.
+function v4PortfolioToken() {
+  try { return localStorage.getItem('v4-portfolio-read-token') || ''; } catch (e) { return ''; }
+}
 async function v4Fetch(path) {
-  const res = await fetch(`${window.V4_API_BASE}${path}`);
+  const token = v4PortfolioToken();
+  const res = await fetch(`${window.V4_API_BASE}${path}`, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined);
+  if (res.status === 401 || res.status === 503) {
+    if (path.startsWith('/api/portfolio')) {
+      throw new Error(res.status === 401
+        ? 'Portfolio data is private: set your portfolio read token in Settings.'
+        : 'Portfolio access is not configured on the Worker yet (PORTFOLIO_READ_TOKEN).');
+    }
+  }
   if (!res.ok) throw new Error(`API ${path} -> HTTP ${res.status}`);
   return res.json();
 }

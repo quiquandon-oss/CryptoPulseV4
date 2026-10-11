@@ -143,7 +143,7 @@
 
 </div>
 
-<script src="app.js?v=2026091218"></script>
+<script src="app.js?v=2026101101"></script>
 <script>
 renderNav('asset.html');
 
@@ -214,6 +214,9 @@ renderNav('asset.html');
       </div>`).join('');
 
     // Position section
+    if (!detail.position && detail.position_requires_auth) {
+      document.getElementById('positionContent').innerHTML = '<p>Position is private: set your portfolio read token in <a class="text-accent underline" href="settings.html">Settings</a>.</p>';
+    }
     if (detail.position) {
       const p = detail.position;
       const pnlColor = p.pnl == null ? 'text-faint' : p.pnl >= 0 ? 'text-up' : 'text-down';

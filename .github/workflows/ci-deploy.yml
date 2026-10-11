@@ -20,7 +20,7 @@ jobs:
 
   deploy:
     needs: test
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -28,6 +28,18 @@ jobs:
         with:
           node-version: 22
       - run: npm install
+      # Portfolio GETs fail closed without PORTFOLIO_READ_TOKEN, so never ship
+      # the Worker before its secret exists; set it before the new code goes live.
+      - name: Require the portfolio read token secret
+        env:
+          PORTFOLIO_READ_TOKEN: ${{ secrets.V4_PORTFOLIO_READ_TOKEN }}
+        run: |
+          [ -n "$PORTFOLIO_READ_TOKEN" ] || { echo "::error::GitHub secret V4_PORTFOLIO_READ_TOKEN is not set. Add it (Settings > Secrets and variables > Actions), then re-run this workflow. Nothing was deployed."; exit 1; }
+      - name: Set PORTFOLIO_READ_TOKEN Worker secret
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PORTFOLIO_READ_TOKEN: ${{ secrets.V4_PORTFOLIO_READ_TOKEN }}
+        run: printf '%s' "$PORTFOLIO_READ_TOKEN" | npx wrangler secret put PORTFOLIO_READ_TOKEN
       - name: Deploy Worker
         run: npx wrangler deploy
         env:

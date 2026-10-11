@@ -37,6 +37,49 @@ function json(data, status = 200) {
   });
 }
 
+// ---- Portfolio read access ----
+// Every GET /api/portfolio* route returns personal holdings and transactions,
+// so it requires `Authorization: Bearer <PORTFOLIO_READ_TOKEN>` (a dedicated
+// Worker secret, separate from INGEST_TOKEN). Fails closed: without the
+// secret configured nothing is served. Responses are marked private/no-store
+// so no browser or intermediary cache keeps them.
+const PORTFOLIO_PRIVATE_HEADERS = { 'Cache-Control': 'private, no-store', Vary: 'Authorization' };
+
+function constantTimeEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+function authorizePortfolioRead(request, env) {
+  const expected = env.PORTFOLIO_READ_TOKEN;
+  if (!expected) return json({ error: 'portfolio_read_not_configured' }, 503);
+  const header = request.headers.get('Authorization') || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+  if (!constantTimeEqual(token, expected)) return json({ error: 'unauthorized' }, 401);
+  return null;
+}
+
+function withPrivateHeaders(response) {
+  const headers = new Headers(response.headers);
+  for (const [k, v] of Object.entries(PORTFOLIO_PRIVATE_HEADERS)) headers.set(k, v);
+  return new Response(response.body, { status: response.status, headers });
+}
+
+async function routePortfolioGet(env, url, parts) {
+  if (parts[2] === 'prediction-funnel') return handlePredictionFunnel(env, url);
+  if (parts[2] === 'assets') return handlePortfolioAssets(env);
+  if (parts[2] === 'transactions') return handlePortfolioTransactions(env, url);
+  if (parts[2] === 'history') return handlePortfolioHistory(env, url);
+  if (parts[2] === 'allocation') return handlePortfolioAllocation(env);
+  if (parts[2] === 'benchmark') return handlePortfolioBenchmark(env, url);
+  if (parts[2] === 'insights') return handlePortfolioInsightsEndpoint(env);
+  if (parts[2] === 'data-health') return handlePortfolioDataHealth(env);
+  if (!parts[2]) return handlePortfolioSummary(env);
+  return json({ error: 'not found' }, 404);
+}
+
 export default {
   async fetch(request, env) {
     if (request.method === 'OPTIONS') return new Response(null, { headers: CORS_HEADERS });
@@ -77,35 +120,14 @@ export default {
       if (parts[1] === 'portfolio' && parts[2] === 'backfill' && request.method === 'POST') {
         return await handlePortfolioBackfill(request, env);
       }
-      if (parts[1] === 'portfolio' && parts[2] === 'prediction-funnel') {
-        return await handlePredictionFunnel(env, url);
+      if (parts[1] === 'portfolio') {
+        if (request.method !== 'GET') return json({ error: 'not found' }, 404);
+        const denied = authorizePortfolioRead(request, env);
+        if (denied) return withPrivateHeaders(denied);
+        return withPrivateHeaders(await routePortfolioGet(env, url, parts));
       }
       if (parts[1] === 'fx' && parts[2] === 'eur-usd') {
         return await handleEurUsdRate(env);
-      }
-      if (parts[1] === 'portfolio' && parts[2] === 'assets') {
-        return await handlePortfolioAssets(env);
-      }
-      if (parts[1] === 'portfolio' && parts[2] === 'transactions') {
-        return await handlePortfolioTransactions(env, url);
-      }
-      if (parts[1] === 'portfolio' && parts[2] === 'history') {
-        return await handlePortfolioHistory(env, url);
-      }
-      if (parts[1] === 'portfolio' && parts[2] === 'allocation') {
-        return await handlePortfolioAllocation(env);
-      }
-      if (parts[1] === 'portfolio' && parts[2] === 'benchmark') {
-        return await handlePortfolioBenchmark(env, url);
-      }
-      if (parts[1] === 'portfolio' && parts[2] === 'insights') {
-        return await handlePortfolioInsightsEndpoint(env);
-      }
-      if (parts[1] === 'portfolio' && parts[2] === 'data-health') {
-        return await handlePortfolioDataHealth(env);
-      }
-      if (parts[1] === 'portfolio' && !parts[2]) {
-        return await handlePortfolioSummary(env);
       }
       if (parts[1] === 'assets' && parts[2] && parts[3] === 'history') {
         return await handleAssetHistory(env, parts[2], url);
@@ -117,7 +139,7 @@ export default {
         return await handleAssetPredictionFunnel(env, parts[2], url);
       }
       if (parts[1] === 'assets' && parts[2]) {
-        return await handleAssetDetail(env, parts[2]);
+        return await handleAssetDetail(request, env, parts[2]);
       }
 
       return json({ error: 'not found' }, 404);
@@ -169,7 +191,7 @@ async function handleMarketOverview(env) {
   return json({ overview });
 }
 
-async function handleAssetDetail(env, assetId) {
+async function handleAssetDetail(request, env, assetId) {
   const signal = await db.getLastSignal(env.DB, assetId.toUpperCase());
   if (!signal) return json({ error: 'no signal yet for this asset' }, 404);
   const indicators = await env.DB
@@ -177,14 +199,19 @@ async function handleAssetDetail(env, assetId) {
   const explanation = await env.DB
     .prepare('SELECT * FROM ai_explanations WHERE signal_id = ?').bind(signal.id).first();
 
+  // The signal is public; the owner's position in this asset is portfolio
+  // data, so it is only included for a request carrying the read token.
+  const positionAuthorized = authorizePortfolioRead(request, env) === null;
   let position = null;
-  const transactions = await portfolio.getAllTransactions(env.DB);
+  const transactions = positionAuthorized ? await portfolio.getAllTransactions(env.DB) : [];
   if (transactions.some((t) => t.asset === assetId.toUpperCase())) {
     const summary = await portfolio.buildPortfolioSummary(env);
     position = summary.byAsset.find((r) => r.asset === assetId.toUpperCase()) ?? null;
   }
 
-  return json({ signal, indicators: indicators.results, explanation: explanation ?? null, position });
+  const res = json({ signal, indicators: indicators.results, explanation: explanation ?? null, position,
+    position_requires_auth: !positionAuthorized });
+  return positionAuthorized ? withPrivateHeaders(res) : res;
 }
 
 async function handleAssetHistory(env, assetId, url) {

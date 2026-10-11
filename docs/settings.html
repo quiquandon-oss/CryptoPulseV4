@@ -62,6 +62,19 @@
   </section>
 
   <section class="mb-6">
+    <h2 class="text-xs text-faint mb-2">Portfolio access</h2>
+    <div class="border border-border rounded-lg px-4 py-3">
+      <label class="text-sm block mb-1.5">Portfolio read token</label>
+      <div class="flex gap-2">
+        <input id="portfolioTokenInput" type="password" autocomplete="off" class="flex-1 bg-surface border border-border rounded-md text-sm px-2 py-1.5 text-ink font-mono" placeholder="Not set">
+        <button id="portfolioTokenSave" class="text-xs px-3 py-1.5 rounded-md bg-accent-soft text-accent border border-accent-30">Save</button>
+        <button id="portfolioTokenClear" class="text-xs px-3 py-1.5 rounded-md border border-border text-faint">Clear</button>
+      </div>
+      <p class="text-xs text-faint mt-2">Required to see holdings, transactions and P&amp;L — the same value as the Worker secret <code>PORTFOLIO_READ_TOKEN</code>. Stored only in this browser and sent only to the V4 Worker; without it those pages show "private". Signals and market pages stay public.</p>
+    </div>
+  </section>
+
+  <section class="mb-6">
     <h2 class="text-xs text-faint mb-2">API connection</h2>
     <div class="border border-border rounded-lg px-4 py-3">
       <label class="text-sm block mb-1.5">Worker API base URL</label>
@@ -84,7 +97,7 @@
   </section>
 </div>
 
-<script src="app.js?v=2026091218"></script>
+<script src="app.js?v=2026101101"></script>
 <script>
 renderNav('settings.html');
 
@@ -115,6 +128,16 @@ document.getElementById('apiBaseSave').addEventListener('click', () => {
 document.getElementById('apiBaseReset').addEventListener('click', () => {
   localStorage.removeItem('v4-api-base-override');
   location.reload();
+});
+
+const portfolioTokenInput = document.getElementById('portfolioTokenInput');
+if (localStorage.getItem('v4-portfolio-read-token')) portfolioTokenInput.placeholder = 'Saved ✓ (hidden)';
+document.getElementById('portfolioTokenSave').addEventListener('click', () => {
+  const val = portfolioTokenInput.value.trim();
+  if (val) { localStorage.setItem('v4-portfolio-read-token', val); portfolioTokenInput.value = ''; portfolioTokenInput.placeholder = 'Saved ✓ (hidden)'; }
+});
+document.getElementById('portfolioTokenClear').addEventListener('click', () => {
+  localStorage.removeItem('v4-portfolio-read-token'); portfolioTokenInput.value = ''; portfolioTokenInput.placeholder = 'Not set';
 });
 
 document.getElementById('importTokenInput').value = localStorage.getItem('v4-import-token') || '';
