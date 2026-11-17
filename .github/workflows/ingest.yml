@@ -1,9 +1,11 @@
 name: V4 ingest tick
 
 on:
-  schedule:
-    # Every hour, matching the 1h candle interval in worker/ingest.js.
-    - cron: '5 * * * *'
+  # SUSPENDED 2026-11-17 (owner decision): the hourly schedule is removed so V4 does not consume the account's shared
+  # Workers Free D1 allowance (V4 reads production sentiment-history and writes its own cryptopulse-v4 database each
+  # run). Manual runs stay available. To resume, restore:
+  #   schedule:
+  #     - cron: '5 * * * *'
   workflow_dispatch: {}
 
 jobs:
